@@ -3,17 +3,17 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# Page config
+# Page setup
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender")
-st.markdown("Find top-rated places based on real user reviews with **AI-powered sentiment analysis** and **Foursquare data**.")
+st.markdown("Find top-rated restaurants near you based on real user reviews using **AI-powered sentiment analysis** and **Foursquare data**.")
 
-# Initialize session state
+# Session state init
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
 
-# Inputs
+# Input form
 with st.container():
     col1, col2 = st.columns([2, 2])
     with col1:
@@ -24,12 +24,12 @@ with st.container():
 # API Key
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-# Search and clear previous state
+# Search
 if st.button("🔍 Search") and food and location and api_key:
     st.session_state.results = None
     st.session_state.df = None
 
-    with st.spinner("Analyzing restaurants..."):
+    with st.spinner("Finding delicious places..."):
 
         headers = {
             "accept": "application/json",
@@ -86,7 +86,6 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Image": photo_url
                     })
 
-            # Save results
             if results:
                 df = pd.DataFrame([
                     {
@@ -101,12 +100,12 @@ if st.button("🔍 Search") and food and location and api_key:
                 st.session_state.results = results
                 st.session_state.df = df
             else:
-                st.warning("Restaurants found but no reviews to analyze.")
+                st.warning("Restaurants found, but no reviews available.")
 
 # Show results
 if st.session_state.results:
     st.divider()
-    st.subheader("📊 Summary Table")
+    st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
     top = max(st.session_state.results, key=lambda x: x["Rating"])
@@ -122,11 +121,12 @@ if st.session_state.results:
             st.markdown(f"**📍 Address:** {r['Address']}")
             st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
             if r["Image"]:
-                try:
-                    img_bytes = requests.get(r["Image"]).content
-                    img = Image.open(BytesIO(img_bytes)).convert("RGB")
-                    img = img.resize((400, 300))  # width x height in pixels
-                    st.image(img)
-                except:
-                    st.write("📷 Image failed to load.")
+                st.markdown(
+                    f"""
+                    <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
+                        <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             st.markdown("---")
