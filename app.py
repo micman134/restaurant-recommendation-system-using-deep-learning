@@ -80,8 +80,8 @@ if st.button("🔍 Find Restaurants") and food and location and api_key:
                 st.dataframe(df_sorted[["Restaurant", "Address", "Average Rating", "Star Visual", "Reviews"]], use_container_width=True)
 
                 # Map
-                st.subheader("🗺️ Map View")
-                st.map(df_sorted[["latitude", "longitude"]])
+                #st.subheader("🗺️ Map View")
+                #st.map(df_sorted[["latitude", "longitude"]])
 
                 # Top Pick
                 top = df_sorted.iloc[0]
