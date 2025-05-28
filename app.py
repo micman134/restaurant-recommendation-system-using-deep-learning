@@ -14,9 +14,15 @@ if "results" not in st.session_state:
     st.session_state.df = None
 
 # Input section
-food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
-location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+with st.container():
+    col1, col2, col3 = st.columns([1, 2, 1])  # center layout
+    with col2:
+        food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
+with st.container():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 # API Key
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
