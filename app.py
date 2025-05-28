@@ -8,7 +8,7 @@ st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender")
 st.markdown("Find top-rated restaurants near you based on real user reviews using **AI-powered sentiment analysis** and **Foursquare data**.")
 
-# Session state init
+# Session state
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
@@ -21,7 +21,7 @@ with st.container():
     with col2:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-# API Key
+# API Key from secrets
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
 # Search
@@ -29,7 +29,7 @@ if st.button("🔍 Search") and food and location and api_key:
     st.session_state.results = None
     st.session_state.df = None
 
-    with st.spinner("Finding delicious places..."):
+    with st.spinner("Searching for restaurants..."):
 
         headers = {
             "accept": "application/json",
@@ -59,10 +59,11 @@ if st.button("🔍 Search") and food and location and api_key:
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
+                review_texts = [tip["text"] for tip in tips[:5]]  # limit to 5 tips
 
                 sentiments = []
-                for tip in tips:
-                    result = classifier(tip["text"][:512])[0]
+                for tip in review_texts:
+                    result = classifier(tip[:512])[0]
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
@@ -83,9 +84,11 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Rating": avg_rating,
                         "Stars": "⭐" * int(round(avg_rating)),
                         "Reviews": len(sentiments),
-                        "Image": photo_url
+                        "Image": photo_url,
+                        "Tips": review_texts
                     })
 
+            # Save results to session
             if results:
                 df = pd.DataFrame([
                     {
@@ -102,7 +105,7 @@ if st.button("🔍 Search") and food and location and api_key:
             else:
                 st.warning("Restaurants found, but no reviews available.")
 
-# Show results
+# Display results
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
@@ -120,6 +123,7 @@ if st.session_state.results:
             st.markdown(f"### {r['Restaurant']}")
             st.markdown(f"**📍 Address:** {r['Address']}")
             st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+
             if r["Image"]:
                 st.markdown(
                     f"""
@@ -129,4 +133,10 @@ if st.session_state.results:
                     """,
                     unsafe_allow_html=True
                 )
+
+            if r["Tips"]:
+                with st.expander("💬 Show Reviews"):
+                    for tip in r["Tips"]:
+                        st.markdown(f"• {tip}")
+
             st.markdown("---")
