@@ -122,5 +122,11 @@ if st.session_state.results:
             st.markdown(f"**📍 Address:** {r['Address']}")
             st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
             if r["Image"]:
-                st.image(r["Image"], use_column_width=True)
+                try:
+                    img_bytes = requests.get(r["Image"]).content
+                    img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                    img = img.resize((400, 300))  # width x height in pixels
+                    st.image(img)
+                except:
+                    st.write("📷 Image failed to load.")
             st.markdown("---")
