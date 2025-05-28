@@ -1,6 +1,6 @@
-streamlit
-pandas
-requests
-torch==2.1.0
+streamlit==1.32.0
+pandas==2.2.2
+requests==2.31.0
 transformers==4.38.2
-sentencepiece
+torch==2.1.0
+sentencepiece==0.1.99
