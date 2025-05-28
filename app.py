@@ -36,8 +36,7 @@ if st.button("🔍 Find Restaurants") and food and location and api_key:
             st.error("❌ No restaurants found. Try different food or location.")
         else:
             classifier = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
-
-            data = []
+            results = []
 
             for r in restaurants:
                 fsq_id = r['fsq_id']
@@ -55,25 +54,40 @@ if st.button("🔍 Find Restaurants") and food and location and api_key:
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
+                # Get image
+                photo_url = ""
+                photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
+                photo_res = requests.get(photo_api, headers=headers)
+                photos = photo_res.json()
+
+                if photos:
+                    # Construct full image URL: prefix + size + suffix
+                    photo = photos[0]
+                    photo_url = f"{photo['prefix']}original{photo['suffix']}"
+
                 if sentiments:
                     avg_rating = round(sum(sentiments) / len(sentiments), 2)
-                    data.append({
+                    results.append({
                         "Restaurant": name,
                         "Address": address,
-                        "Average Rating": avg_rating,
-                        "Star Visual": "⭐" * int(round(avg_rating)),
-                        "Reviews": len(sentiments)
+                        "Rating": avg_rating,
+                        "Stars": "⭐" * int(round(avg_rating)),
+                        "Reviews": len(sentiments),
+                        "Image": photo_url
                     })
 
-            if data:
-                df = pd.DataFrame(data)
-                df_sorted = df.sort_values(by="Average Rating", ascending=False)
-
+            if results:
                 st.success(f"✅ Top restaurants for *{food}* in *{location}*")
-                st.dataframe(df_sorted[["Restaurant", "Address", "Average Rating", "Star Visual", "Reviews"]], use_container_width=True)
 
-                # Top Pick
-                top = df_sorted.iloc[0]
-                st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Average Rating']} ⭐")
+                # Display results with images
+                for r in sorted(results, key=lambda x: x["Rating"], reverse=True):
+                    st.markdown(f"### {r['Restaurant']}  \n📍 {r['Address']}  \n{r['Stars']} ({r['Rating']}/5) — {r['Reviews']} reviews")
+                    if r["Image"]:
+                        st.image(r["Image"], width=400)
+                    st.markdown("---")
+
+                # Highlight Top Pick
+                top = max(results, key=lambda x: x["Rating"])
+                st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
             else:
                 st.warning("Found restaurants but no reviews to analyze.")
