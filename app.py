@@ -6,25 +6,21 @@ from transformers import pipeline
 # Page setup
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender")
-st.markdown("Find top-rated restaurants near you using **Foursquare data** and **AI-powered sentiment analysis** of real user reviews.")
+st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-# Initialize session state
+# Session state
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
 
 # Input section
-with st.container():
-    col1, col2 = st.columns(2)
-    with col1:
-        food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
-    with col2:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
+location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-# Get API key
+# API Key
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-# Button click
+# Search action
 if st.button("🔍 Search") and food and location and api_key:
     st.session_state.results = None
     st.session_state.df = None
@@ -55,7 +51,7 @@ if st.button("🔍 Search") and food and location and api_key:
                 name = r['name']
                 address = r['location'].get('formatted_address', 'Unknown')
 
-                # Fetch user tips
+                # Fetch tips
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
@@ -67,7 +63,7 @@ if st.button("🔍 Search") and food and location and api_key:
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
-                # Fetch restaurant image
+                # Fetch image
                 photo_url = ""
                 photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                 photo_res = requests.get(photo_api, headers=headers)
@@ -88,7 +84,7 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Tips": review_texts if review_texts else []
                     })
 
-            # Save to session state
+            # Save results
             if results:
                 df = pd.DataFrame([
                     {
@@ -100,10 +96,12 @@ if st.button("🔍 Search") and food and location and api_key:
                     }
                     for r in results
                 ])
+
+                df.index = df.index + 1  # Make index start from 1
                 st.session_state.results = results
                 st.session_state.df = df
             else:
-                st.warning("Found restaurants, but no reviews available.")
+                st.warning("Found restaurants but no reviews available.")
 
 # Display results
 if st.session_state.results:
@@ -134,9 +132,10 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
-            if r.get("Tips", []):
-                with st.expander("💬 Show Reviews"):
-                    for tip in r.get("Tips", []):
-                        st.markdown(f"• {tip}")
+            tips = r.get("Tips", [])[:2]  # show first 2 reviews
+            if tips:
+                st.markdown("💬 **Reviews:**")
+                for tip in tips:
+                    st.markdown(f"• _{tip}_")
 
             st.markdown("---")
