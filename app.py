@@ -1,26 +1,24 @@
-# streamlit_app.py
-
 import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
 
 # UI Setup
-st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="centered")
-st.title("🍽️ AI-Powered Restaurant Recommender")
-st.markdown("Discover top-rated restaurants based on real reviews, powered by **BERT sentiment analysis**.")
+st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
+st.title("🍽️ AI Restaurant Recommender")
+st.markdown("Discover top-rated restaurants near you based on real reviews using **AI-powered sentiment analysis** and **Foursquare Places API**.")
 
 # Inputs
 food = st.text_input("🍕 What kind of food are you craving?", placeholder="e.g., Jollof, Sushi, Pizza")
 location = st.text_input("📍 Where are you located?", placeholder="e.g., Lagos, Nigeria")
 
-# API Key (streamlit cloud secret)
-api_key = st.secrets["FOURSQUARE_API_KEY"]
+# API Key from secrets
+api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-# Run search
-if st.button("🔍 Find Restaurants") and food and location:
-    with st.spinner("Finding delicious spots..."):
+if st.button("🔍 Find Restaurants") and food and location and api_key:
+    with st.spinner("Finding delicious places..."):
 
+        # Prepare request
         headers = {
             "accept": "application/json",
             "Authorization": api_key
@@ -35,18 +33,23 @@ if st.button("🔍 Find Restaurants") and food and location:
         restaurants = res.json().get("results", [])
 
         if not restaurants:
-            st.error("No restaurants found. Try a different query.")
+            st.error("❌ No restaurants found. Try different food or location.")
         else:
             classifier = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
+
             data = []
 
             for r in restaurants:
                 fsq_id = r['fsq_id']
                 name = r['name']
                 address = r['location'].get('formatted_address', 'Unknown')
-                lat = r['geocodes']['main']['latitude']
-                lon = r['geocodes']['main']['longitude']
+                lat = r.get('geocodes', {}).get('main', {}).get('latitude')
+                lon = r.get('geocodes', {}).get('main', {}).get('longitude')
 
+                if lat is None or lon is None:
+                    continue  # skip places without geolocation
+
+                # Get tips
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
@@ -65,23 +68,23 @@ if st.button("🔍 Find Restaurants") and food and location:
                         "Average Rating": avg_rating,
                         "Star Visual": "⭐" * int(round(avg_rating)),
                         "Reviews": len(sentiments),
-                        "lat": lat,
-                        "lon": lon
+                        "latitude": lat,
+                        "longitude": lon
                     })
 
             if data:
                 df = pd.DataFrame(data)
                 df_sorted = df.sort_values(by="Average Rating", ascending=False)
 
-                st.success(f"🍽️ Top Restaurants for *{food}* in *{location}*")
-                st.dataframe(df_sorted[["Restaurant", "Address", "Average Rating", "Star Visual", "Reviews"]])
+                st.success(f"✅ Top restaurants for *{food}* in *{location}*")
+                st.dataframe(df_sorted[["Restaurant", "Address", "Average Rating", "Star Visual", "Reviews"]], use_container_width=True)
 
-                # Map View
+                # Map
                 st.subheader("🗺️ Map View")
-                st.map(df_sorted.rename(columns={"lat": "latitude", "lon": "longitude"}))
+                st.map(df_sorted[["latitude", "longitude"]])
 
-                # Highlight Top Pick
+                # Top Pick
                 top = df_sorted.iloc[0]
                 st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Average Rating']} ⭐")
             else:
-                st.info("Found restaurants, but no reviews available to analyze.")
+                st.warning("Found restaurants but no reviews to analyze.")
