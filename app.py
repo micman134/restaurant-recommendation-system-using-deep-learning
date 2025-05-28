@@ -116,4 +116,7 @@ if st.session_state.results:
         with st.container():
             st.markdown(f"#### {r['Restaurant']}")
             st.write(f"📍 {r['Address']}")
-            st.write(f"{
+            st.write(f"{r['Stars']} — {r['Reviews']} reviews")
+            if r["Image"]:
+                st.image(r["Image"], width=400)
+            st.markdown("---")
