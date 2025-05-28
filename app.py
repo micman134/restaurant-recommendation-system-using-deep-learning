@@ -15,12 +15,12 @@ if "results" not in st.session_state:
 
 # Input section
 with st.container():
-    col1, _ = st.columns([2, 5])  # col1 = input, rest = empty space
+    col1, _ = st.columns([1, 1])  # col1 = input, rest = empty space
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, _ = st.columns([2, 5])
+    col1, _ = st.columns([1, 1])
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
