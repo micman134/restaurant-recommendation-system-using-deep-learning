@@ -8,19 +8,19 @@ st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender")
 st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-# Session state
+# Initialize session state
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
 
 # Input section
 with st.container():
-    col1, _ = st.columns([1, 1])  # col1 = input, rest = empty space
+    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, _ = st.columns([1, 1])
+    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
@@ -90,8 +90,19 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Image": photo_url,
                         "Tips": review_texts if review_texts else []
                     })
+                else:
+                    # If no reviews, show restaurant with 0 reviews
+                    results.append({
+                        "Restaurant": name,
+                        "Address": address,
+                        "Rating": 0,
+                        "Stars": "⭐" * 0,  # 0 stars
+                        "Reviews": 0,
+                        "Image": photo_url,
+                        "Tips": []
+                    })
 
-            # Save results
+            # Save results to session state
             if results:
                 df = pd.DataFrame([
                     {
@@ -104,11 +115,11 @@ if st.button("🔍 Search") and food and location and api_key:
                     for r in results
                 ])
 
-                df.index = df.index + 1  # Make index start from 1
+                df.index = df.index + 1  # Start table index from 1
                 st.session_state.results = results
                 st.session_state.df = df
             else:
-                st.warning("Found restaurants but no reviews available.")
+                st.warning("Found restaurants, but no reviews available.")
 
 # Display results
 if st.session_state.results:
@@ -139,7 +150,8 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
-            tips = r.get("Tips", [])[:2]  # show first 2 reviews
+            # Show 2 reviews max
+            tips = r.get("Tips", [])[:2]
             if tips:
                 st.markdown("💬 **Reviews:**")
                 for tip in tips:
