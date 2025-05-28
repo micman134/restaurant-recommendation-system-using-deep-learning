@@ -2,33 +2,64 @@ import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
+import geocoder
 
-# Page setup
+# ---------------------
+# PAGE CONFIG
+# ---------------------
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender")
-st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
+st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real reviews.")
 
-# Initialize session state
+# ---------------------
+# SESSION INIT
+# ---------------------
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
 
-# Input section
+# ---------------------
+# FILTER CONTROLS
+# ---------------------
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
-    with col1:
-        food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
+    col1, col2 = st.columns(2)
 
+    with col1:
+        selected_tags = st.multiselect(
+            "🍱 Cuisine Tags (optional)", 
+            ["Pizza", "Sushi", "Burgers", "Jollof", "Vegan", "BBQ", "Seafood", "Pasta"], 
+            default=[]
+        )
+
+    with col2:
+        min_rating = st.slider("⭐ Minimum Average Rating", 0.0, 5.0, 3.0, 0.5)
+
+# ---------------------
+# LOCATION CONTROLS
+# ---------------------
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
-    with col1:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+    col1, col2 = st.columns(2)
 
+    with col1:
+        food = st.text_input("🍕 Food Type", placeholder="e.g., Pizza, Sushi")
+
+    with col2:
+        auto_loc = st.checkbox("📍 Use My Location")
+        if auto_loc:
+            g = geocoder.ip('me')
+            location = g.city or ""
+        else:
+            location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+
+# ---------------------
 # API Key
+# ---------------------
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-# Search action
-if st.button("🔍 Search") and food and location and api_key:
+# ---------------------
+# SEARCH
+# ---------------------
+if st.button("🔍 Search") and food and (location or auto_loc) and api_key:
     st.session_state.results = None
     st.session_state.df = None
 
@@ -38,8 +69,9 @@ if st.button("🔍 Search") and food and location and api_key:
             "accept": "application/json",
             "Authorization": api_key
         }
+        query = f"{food} {' '.join(selected_tags)}"
         params = {
-            "query": food,
+            "query": query,
             "near": location,
             "limit": 10
         }
@@ -58,7 +90,7 @@ if st.button("🔍 Search") and food and location and api_key:
                 name = r['name']
                 address = r['location'].get('formatted_address', 'Unknown')
 
-                # Fetch tips
+                # Get tips
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
@@ -70,7 +102,7 @@ if st.button("🔍 Search") and food and location and api_key:
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
-                # Fetch image
+                # Get image
                 photo_url = ""
                 photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                 photo_res = requests.get(photo_api, headers=headers)
@@ -79,31 +111,21 @@ if st.button("🔍 Search") and food and location and api_key:
                     photo = photos[0]
                     photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
-                if sentiments:
-                    avg_rating = round(sum(sentiments) / len(sentiments), 2)
-                    results.append({
-                        "Restaurant": name,
-                        "Address": address,
-                        "Rating": avg_rating,
-                        "Stars": "⭐" * int(round(avg_rating)),
-                        "Reviews": len(sentiments),
-                        "Image": photo_url,
-                        "Tips": review_texts if review_texts else []
-                    })
-                else:
-                    # If no reviews, show restaurant with 0 reviews
-                    results.append({
-                        "Restaurant": name,
-                        "Address": address,
-                        "Rating": 0,
-                        "Stars": "⭐" * 0,  # 0 stars
-                        "Reviews": 0,
-                        "Image": photo_url,
-                        "Tips": []
-                    })
+                avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+                results.append({
+                    "Restaurant": name,
+                    "Address": address,
+                    "Rating": avg_rating,
+                    "Stars": "⭐" * int(round(avg_rating)),
+                    "Reviews": len(sentiments),
+                    "Image": photo_url,
+                    "Tips": review_texts[:2] if review_texts else []
+                })
 
-            # Save results to session state
-            if results:
+            # Filter results by rating
+            filtered_results = [r for r in results if r["Rating"] >= min_rating]
+
+            if filtered_results:
                 df = pd.DataFrame([
                     {
                         "Restaurant": r["Restaurant"],
@@ -112,29 +134,40 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Stars": r["Stars"],
                         "Reviews": r["Reviews"]
                     }
-                    for r in results
+                    for r in filtered_results
                 ])
+                df = df.sort_values(by="Average Rating", ascending=False)
+                df.index = range(1, len(df) + 1)
 
-                df.index = df.index + 1  # Start table index from 1
-                st.session_state.results = results
+                st.session_state.results = filtered_results
                 st.session_state.df = df
             else:
-                st.warning("Found restaurants, but no reviews available.")
+                st.warning("No results meet the rating filter.")
 
-# Display results
+# ---------------------
+# DISPLAY RESULTS
+# ---------------------
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
+
+    # CSV Export
+    csv = st.session_state.df.to_csv(index=True).encode("utf-8")
+    st.download_button("📥 Download CSV", csv, "restaurant_recommendations.csv", "text/csv")
+
+    # Show DataFrame
     st.dataframe(st.session_state.df, use_container_width=True)
 
+    # Top Pick
     top = max(st.session_state.results, key=lambda x: x["Rating"])
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
+    # Highlights
     st.divider()
     st.subheader("📸 Restaurant Highlights")
 
     cols = st.columns(2)
-    for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
+    for idx, r in enumerate(st.session_state.results):
         with cols[idx % 2]:
             st.markdown(f"### {r['Restaurant']}")
             st.markdown(f"**📍 Address:** {r['Address']}")
@@ -150,11 +183,9 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
-            # Show 2 reviews max
-            tips = r.get("Tips", [])[:2]
-            if tips:
+            if r.get("Tips"):
                 st.markdown("💬 **Reviews:**")
-                for tip in tips:
+                for tip in r["Tips"]:
                     st.markdown(f"• _{tip}_")
 
             st.markdown("---")
