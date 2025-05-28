@@ -105,7 +105,7 @@ if st.button("🔍 Search") and food and location and api_key:
 # Show results
 if st.session_state.results:
     st.divider()
-    st.subheader("📊 Restaurant Table")
+    st.subheader("Restaurant Search Results")
     st.dataframe(st.session_state.df, use_container_width=True)
 
     top = max(st.session_state.results, key=lambda x: x["Rating"])
