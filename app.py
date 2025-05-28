@@ -3,10 +3,15 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# UI Setup
+# Page setup
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender")
 st.markdown("Discover top-rated restaurants near you based on real reviews using **AI-powered sentiment analysis** and the **Foursquare Places API**.")
+
+# Session state to persist results
+if "results" not in st.session_state:
+    st.session_state.results = None
+    st.session_state.df = None
 
 # Inputs
 food = st.text_input("🍕 What kind of food are you craving?", placeholder="e.g., Jollof, Sushi, Pizza")
@@ -15,10 +20,10 @@ location = st.text_input("📍 Where are you located?", placeholder="e.g., Lagos
 # API Key from secrets
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
+# Search
 if st.button("🔍 Find Restaurants") and food and location and api_key:
     with st.spinner("Finding delicious places..."):
 
-        # Prepare request
         headers = {
             "accept": "application/json",
             "Authorization": api_key
@@ -33,7 +38,9 @@ if st.button("🔍 Find Restaurants") and food and location and api_key:
         restaurants = res.json().get("results", [])
 
         if not restaurants:
-            st.error("❌ No restaurants found. Try different food or location.")
+            st.error("❌ No restaurants found. Try a different search.")
+            st.session_state.results = None
+            st.session_state.df = None
         else:
             classifier = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
             results = []
@@ -59,7 +66,6 @@ if st.button("🔍 Find Restaurants") and food and location and api_key:
                 photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                 photo_res = requests.get(photo_api, headers=headers)
                 photos = photo_res.json()
-
                 if photos:
                     photo = photos[0]
                     photo_url = f"{photo['prefix']}original{photo['suffix']}"
@@ -75,10 +81,8 @@ if st.button("🔍 Find Restaurants") and food and location and api_key:
                         "Image": photo_url
                     })
 
+            # Save to session_state
             if results:
-                st.success(f"✅ Top restaurants for *{food}* in *{location}*")
-
-                # Table View
                 df = pd.DataFrame([
                     {
                         "Restaurant": r["Restaurant"],
@@ -89,21 +93,27 @@ if st.button("🔍 Find Restaurants") and food and location and api_key:
                     }
                     for r in results
                 ])
-                st.dataframe(df, use_container_width=True)
-
-                # Top Pick
-                top = max(results, key=lambda x: x["Rating"])
-                st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
-
-                # Image Preview
-                st.subheader("📸 Preview with Images")
-                for r in sorted(results, key=lambda x: x["Rating"], reverse=True):
-                    with st.container():
-                        st.markdown(f"#### {r['Restaurant']}")
-                        st.write(f"📍 {r['Address']}")
-                        st.write(f"{r['Stars']} — {r['Reviews']} reviews")
-                        if r["Image"]:
-                            st.image(r["Image"], width=400)
-                        st.markdown("---")
+                st.session_state.results = results
+                st.session_state.df = df
             else:
-                st.warning("Found restaurants but no reviews to analyze.")
+                st.warning("Restaurants found, but no reviews to analyze.")
+                st.session_state.results = None
+                st.session_state.df = None
+
+# Always display results if available
+if st.session_state.results:
+    st.success("🍽️ Previous Search Results")
+    
+    st.dataframe(st.session_state.df, use_container_width=True)
+
+    # Highlight Top Pick
+    top = max(st.session_state.results, key=lambda x: x["Rating"])
+    st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+
+    # Images + details
+    st.subheader("📸 Preview with Images")
+    for r in sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True):
+        with st.container():
+            st.markdown(f"#### {r['Restaurant']}")
+            st.write(f"📍 {r['Address']}")
+            st.write(f"{
