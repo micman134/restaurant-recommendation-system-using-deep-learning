@@ -15,13 +15,13 @@ if "results" not in st.session_state:
 
 # Input section
 with st.container():
-    col1, col2, col3 = st.columns([1, 2, 1])  # center layout
-    with col2:
+    col1, _ = st.columns([2,5])  # center layout
+    with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+    col1, _ = st.columns([2,5])
+    with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 # API Key
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
