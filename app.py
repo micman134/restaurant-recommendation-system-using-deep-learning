@@ -15,12 +15,12 @@ if "results" not in st.session_state:
 
 # Input section
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
+    col1, _ = st.columns([1, 1])
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
+    col1, _ = st.columns([1, 1])
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
@@ -91,50 +91,54 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Tips": review_texts if review_texts else []
                     })
                 else:
-                    # If no reviews, show restaurant with 0 reviews
                     results.append({
                         "Restaurant": name,
                         "Address": address,
                         "Rating": 0,
-                        "Stars": "⭐" * 0,  # 0 stars
+                        "Stars": "⭐" * 0,
                         "Reviews": 0,
                         "Image": photo_url,
                         "Tips": []
                     })
 
-            # Save results to session state
-            if results:
-                df = pd.DataFrame([
-                    {
-                        "Restaurant": r["Restaurant"],
-                        "Address": r["Address"],
-                        "Average Rating": r["Rating"],
-                        "Stars": r["Stars"],
-                        "Reviews": r["Reviews"]
-                    }
-                    for r in results
-                ])
+            # Sort results by rating
+            sorted_results = sorted(results, key=lambda x: x["Rating"], reverse=True)
+            st.session_state.results = sorted_results
 
-                df.index = df.index + 1  # Start table index from 1
-                st.session_state.results = results
-                st.session_state.df = df
-            else:
-                st.warning("Found restaurants, but no reviews available.")
+            df = pd.DataFrame([
+                {
+                    "Restaurant": r["Restaurant"],
+                    "Address": r["Address"],
+                    "Average Rating": r["Rating"],
+                    "Stars": r["Stars"],
+                    "Reviews": r["Reviews"]
+                }
+                for r in sorted_results
+            ])
+            st.session_state.df = df
 
 # Display results
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
-    st.dataframe(st.session_state.df, use_container_width=True)
 
-    top = max(st.session_state.results, key=lambda x: x["Rating"])
+    # Function to highlight top 3
+    def highlight_top3(row):
+        colors = ['background-color: #ffeaa7; font-weight: bold'] * len(row)
+        return colors if row.name < 3 else [''] * len(row)
+
+    styled_df = st.session_state.df.style.apply(highlight_top3, axis=1)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
+    # Top pick metric
+    top = st.session_state.results[0]
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
     st.divider()
     st.subheader("📸 Restaurant Highlights")
 
     cols = st.columns(2)
-    for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
+    for idx, r in enumerate(st.session_state.results[:3]):  # Only show top 3 visually
         with cols[idx % 2]:
             st.markdown(f"### {r['Restaurant']}")
             st.markdown(f"**📍 Address:** {r['Address']}")
@@ -150,7 +154,6 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
-            # Show 2 reviews max
             tips = r.get("Tips", [])[:2]
             if tips:
                 st.markdown("💬 **Reviews:**")
