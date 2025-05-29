@@ -131,7 +131,7 @@ if st.session_state.results:
     top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
     st.divider()
-    st.subheader("🏅 Top Picks")
+    st.subheader("🏅 Top 3 Picks")
 
     cols = st.columns(3)
     medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
