@@ -95,7 +95,7 @@ if st.button("🔍 Search") and food and location and api_key:
             for r in results:
                 r["IsBest"] = r["Rating"] in top_ratings
 
-            # Save DataFrame
+            # Create DataFrame with SN starting at 1
             df = pd.DataFrame([
                 {
                     "Restaurant": r["Restaurant"],
@@ -106,36 +106,44 @@ if st.button("🔍 Search") and food and location and api_key:
                 }
                 for r in results
             ])
-            df.index = range(1, len(df) + 1)  # Serial numbers from 1
+            df.index = range(1, len(df) + 1)
 
             st.session_state.results = results
             st.session_state.df = df
 
-# Display results
+# Display
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
-    top = max(st.session_state.results, key=lambda x: x["Rating"])
-    st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+    # Review stats
+    st.divider()
+    st.subheader("📈 Review Stats")
+    df = st.session_state.df
+    total_reviews = df["Reviews"].sum()
+    avg_all_rating = round(df["Average Rating"].mean(), 2)
+    most_reviewed = df.iloc[df["Reviews"].idxmax()]["Restaurant"]
 
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📝 Total Reviews", total_reviews)
+    col2.metric("🌟 Avg Rating", avg_all_rating)
+    col3.metric("🔥 Most Reviewed", most_reviewed)
+
+    # Highlight colors
     st.divider()
     st.subheader("📸 Restaurant Highlights")
-
     highlight_colors = {
-        0: "#ffe599",  # gold
-        1: "#d9ead3",  # green
-        2: "#cfe2f3"   # blue
+        0: "#ffe599",  # Gold
+        1: "#d9ead3",  # Green
+        2: "#cfe2f3"   # Blue
     }
 
-    # Map ratings to rank
     rating_to_rank = {
         rating: i for i, rating in enumerate(sorted({r["Rating"] for r in st.session_state.results}, reverse=True)[:3])
     }
 
     cols = st.columns(2)
-
     for idx, r in enumerate(st.session_state.results):
         with cols[idx % 2]:
             if r.get("IsBest", False):
