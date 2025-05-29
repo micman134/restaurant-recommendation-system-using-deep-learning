@@ -15,12 +15,12 @@ if "results" not in st.session_state:
 
 # Input section
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
+    col1, _ = st.columns([1, 1])
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
+    col1, _ = st.columns([1, 1])
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
@@ -79,66 +79,65 @@ if st.button("🔍 Search") and food and location and api_key:
                     photo = photos[0]
                     photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
-                if sentiments:
-                    avg_rating = round(sum(sentiments) / len(sentiments), 2)
-                    results.append({
-                        "Restaurant": name,
-                        "Address": address,
-                        "Rating": avg_rating,
-                        "Stars": "⭐" * int(round(avg_rating)),
-                        "Reviews": len(sentiments),
-                        "Image": photo_url,
-                        "Tips": review_texts if review_texts else []
-                    })
-                else:
-                    # If no reviews, show restaurant with 0 reviews
-                    results.append({
-                        "Restaurant": name,
-                        "Address": address,
-                        "Rating": 0,
-                        "Stars": "⭐" * 0,  # 0 stars
-                        "Reviews": 0,
-                        "Image": photo_url,
-                        "Tips": []
-                    })
+                avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+                results.append({
+                    "Restaurant": name,
+                    "Address": address,
+                    "Rating": avg_rating,
+                    "Stars": "⭐" * int(round(avg_rating)),
+                    "Reviews": len(sentiments),
+                    "Image": photo_url,
+                    "Tips": review_texts if review_texts else []
+                })
 
-            # Save results to session state
-            if results:
-                df = pd.DataFrame([
-                    {
-                        "Restaurant": r["Restaurant"],
-                        "Address": r["Address"],
-                        "Average Rating": r["Rating"],
-                        "Stars": r["Stars"],
-                        "Reviews": r["Reviews"]
-                    }
-                    for r in results
-                ])
+            # Save sorted results
+            results_sorted = sorted(results, key=lambda x: x["Rating"], reverse=True)
+            df = pd.DataFrame([
+                {
+                    "🏅": "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "",
+                    "Restaurant": r["Restaurant"],
+                    "Address": r["Address"],
+                    "Average Rating": r["Rating"],
+                    "Stars": r["Stars"],
+                    "Reviews": r["Reviews"]
+                }
+                for i, r in enumerate(results_sorted)
+            ])
 
-                df.index = df.index + 1  # Start table index from 1
-                st.session_state.results = results
-                st.session_state.df = df
-            else:
-                st.warning("Found restaurants, but no reviews available.")
+            df.index = df.index + 1
+            st.session_state.results = results_sorted
+            st.session_state.df = df
 
 # Display results
 if st.session_state.results:
     st.divider()
-    st.subheader("📊 Restaurant Table")
-    st.dataframe(st.session_state.df, use_container_width=True)
+    st.subheader("📊 Sorted Restaurant Table (Top Rated First)")
 
-    top = max(st.session_state.results, key=lambda x: x["Rating"])
+    # Sort DataFrame and display
+    sorted_df = st.session_state.df.sort_values(by="Average Rating", ascending=False)
+    st.dataframe(sorted_df, use_container_width=True)
+
+    top = st.session_state.results[0]
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
     st.divider()
     st.subheader("📸 Restaurant Highlights")
 
+    highlight_colors = ["#ffe599", "#d9ead3", "#cfe2f3"]  # Gold, Light Green, Light Blue
     cols = st.columns(2)
-    for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
+    for idx, r in enumerate(st.session_state.results):
+        color = highlight_colors[idx] if idx < 3 else "#f9f9f9"
+
         with cols[idx % 2]:
-            st.markdown(f"### {r['Restaurant']}")
-            st.markdown(f"**📍 Address:** {r['Address']}")
-            st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+            st.markdown(
+                f"""
+                <div style="background-color: {color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                    <h4>{'🥇' if idx==0 else '🥈' if idx==1 else '🥉' if idx==2 else ''} {r['Restaurant']}</h4>
+                    <p><strong>📍 Address:</strong> {r['Address']}</p>
+                    <p><strong>⭐ Rating:</strong> {r['Rating']} ({r['Reviews']} reviews)</p>
+                """,
+                unsafe_allow_html=True
+            )
 
             if r["Image"]:
                 st.markdown(
@@ -150,11 +149,10 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
-            # Show 2 reviews max
             tips = r.get("Tips", [])[:2]
             if tips:
                 st.markdown("💬 **Reviews:**")
                 for tip in tips:
                     st.markdown(f"• _{tip}_")
 
-            st.markdown("---")
+            st.markdown("</div>", unsafe_allow_html=True)
