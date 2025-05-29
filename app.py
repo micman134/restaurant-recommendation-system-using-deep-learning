@@ -94,17 +94,15 @@ if st.button("🔍 Search") and food and location and api_key:
             results_sorted = sorted(results, key=lambda x: x["Rating"], reverse=True)
             df = pd.DataFrame([
                 {
-                    "🏅": "🥇" if i == 0 else "🥈" if i == 1 else "🥉" if i == 2 else "",
                     "Restaurant": r["Restaurant"],
                     "Address": r["Address"],
                     "Average Rating": r["Rating"],
                     "Stars": r["Stars"],
                     "Reviews": r["Reviews"]
                 }
-                for i, r in enumerate(results_sorted)
+                for r in results_sorted
             ])
-
-            df.index = df.index + 1
+            df.index = range(1, len(df) + 1)  # Serial numbers start at 1
             st.session_state.results = results_sorted
             st.session_state.df = df
 
@@ -113,7 +111,6 @@ if st.session_state.results:
     st.divider()
     st.subheader("📊 Sorted Restaurant Table (Top Rated First)")
 
-    # Sort DataFrame and display
     sorted_df = st.session_state.df.sort_values(by="Average Rating", ascending=False)
     st.dataframe(sorted_df, use_container_width=True)
 
@@ -123,21 +120,27 @@ if st.session_state.results:
     st.divider()
     st.subheader("📸 Restaurant Highlights")
 
-    highlight_colors = ["#ffe599", "#d9ead3", "#cfe2f3"]  # Gold, Light Green, Light Blue
+    highlight_colors = ["#ffe599", "#d9ead3", "#cfe2f3"]  # Top 3 colors
     cols = st.columns(2)
-    for idx, r in enumerate(st.session_state.results):
-        color = highlight_colors[idx] if idx < 3 else "#f9f9f9"
 
+    for idx, r in enumerate(st.session_state.results):
         with cols[idx % 2]:
-            st.markdown(
-                f"""
-                <div style="background-color: {color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                    <h4>{'🥇' if idx==0 else '🥈' if idx==1 else '🥉' if idx==2 else ''} {r['Restaurant']}</h4>
-                    <p><strong>📍 Address:</strong> {r['Address']}</p>
-                    <p><strong>⭐ Rating:</strong> {r['Rating']} ({r['Reviews']} reviews)</p>
-                """,
-                unsafe_allow_html=True
-            )
+            if idx < 3:
+                color = highlight_colors[idx]
+                emoji = "🥇" if idx == 0 else "🥈" if idx == 1 else "🥉"
+                st.markdown(
+                    f"""
+                    <div style="background-color: {color}; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                        <h4>{emoji} {r['Restaurant']}</h4>
+                        <p><strong>📍 Address:</strong> {r['Address']}</p>
+                        <p><strong>⭐ Rating:</strong> {r['Rating']} ({r['Reviews']} reviews)</p>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(f"### {r['Restaurant']}")
+                st.markdown(f"**📍 Address:** {r['Address']}")
+                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
 
             if r["Image"]:
                 st.markdown(
@@ -155,4 +158,7 @@ if st.session_state.results:
                 for tip in tips:
                     st.markdown(f"• _{tip}_")
 
-            st.markdown("</div>", unsafe_allow_html=True)
+            if idx < 3:
+                st.markdown("</div>", unsafe_allow_html=True)
+            else:
+                st.markdown("---")
