@@ -1,4 +1,4 @@
-sort table item from the best to the lowest: import streamlit as st
+import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
