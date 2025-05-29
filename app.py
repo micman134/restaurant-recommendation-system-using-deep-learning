@@ -1,4 +1,4 @@
-import streamlit as st
+sort table item from the best to the lowest: import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
@@ -15,12 +15,12 @@ if "results" not in st.session_state:
 
 # Input section
 with st.container():
-    col1, _ = st.columns([1, 1])
+    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, _ = st.columns([1, 1])
+    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
@@ -79,89 +79,66 @@ if st.button("🔍 Search") and food and location and api_key:
                     photo = photos[0]
                     photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
-                avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
-                results.append({
-                    "Restaurant": name,
-                    "Address": address,
-                    "Rating": avg_rating,
-                    "Stars": "⭐" * int(round(avg_rating)),
-                    "Reviews": len(sentiments),
-                    "Image": photo_url,
-                    "Tips": review_texts
-                })
+                if sentiments:
+                    avg_rating = round(sum(sentiments) / len(sentiments), 2)
+                    results.append({
+                        "Restaurant": name,
+                        "Address": address,
+                        "Rating": avg_rating,
+                        "Stars": "⭐" * int(round(avg_rating)),
+                        "Reviews": len(sentiments),
+                        "Image": photo_url,
+                        "Tips": review_texts if review_texts else []
+                    })
+                else:
+                    # If no reviews, show restaurant with 0 reviews
+                    results.append({
+                        "Restaurant": name,
+                        "Address": address,
+                        "Rating": 0,
+                        "Stars": "⭐" * 0,  # 0 stars
+                        "Reviews": 0,
+                        "Image": photo_url,
+                        "Tips": []
+                    })
 
-            # Mark best 3 restaurants
-            top_ratings = sorted({r["Rating"] for r in results}, reverse=True)[:3]
-            for r in results:
-                r["IsBest"] = r["Rating"] in top_ratings
+            # Save results to session state
+            if results:
+                df = pd.DataFrame([
+                    {
+                        "Restaurant": r["Restaurant"],
+                        "Address": r["Address"],
+                        "Average Rating": r["Rating"],
+                        "Stars": r["Stars"],
+                        "Reviews": r["Reviews"]
+                    }
+                    for r in results
+                ])
 
-            # Create DataFrame with SN starting at 1
-            df = pd.DataFrame([
-                {
-                    "Restaurant": r["Restaurant"],
-                    "Address": r["Address"],
-                    "Average Rating": r["Rating"],
-                    "Stars": r["Stars"],
-                    "Reviews": r["Reviews"]
-                }
-                for r in results
-            ])
-            df.index = range(1, len(df) + 1)
+                df.index = df.index + 1  # Start table index from 1
+                st.session_state.results = results
+                st.session_state.df = df
+            else:
+                st.warning("Found restaurants, but no reviews available.")
 
-            st.session_state.results = results
-            st.session_state.df = df
-
-# Display
+# Display results
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
-    # Review stats
-    st.divider()
-    st.subheader("📈 Review Stats")
-    df = st.session_state.df
-    total_reviews = df["Reviews"].sum()
-    avg_all_rating = round(df["Average Rating"].mean(), 2)
-    most_reviewed = df.iloc[df["Reviews"].idxmax()]["Restaurant"]
+    top = max(st.session_state.results, key=lambda x: x["Rating"])
+    st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("📝 Total Reviews", total_reviews)
-    col2.metric("🌟 Avg Rating", avg_all_rating)
-    col3.metric("🔥 Most Reviewed", most_reviewed)
-
-    # Highlight colors
     st.divider()
     st.subheader("📸 Restaurant Highlights")
-    highlight_colors = {
-        0: "#ffe599",  # Gold
-        1: "#d9ead3",  # Green
-        2: "#cfe2f3"   # Blue
-    }
-
-    rating_to_rank = {
-        rating: i for i, rating in enumerate(sorted({r["Rating"] for r in st.session_state.results}, reverse=True)[:3])
-    }
 
     cols = st.columns(2)
-    for idx, r in enumerate(st.session_state.results):
+    for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
         with cols[idx % 2]:
-            if r.get("IsBest", False):
-                rank = rating_to_rank.get(r["Rating"], 2)
-                color = highlight_colors.get(rank, "#f4cccc")
-                st.markdown(
-                    f"""
-                    <div style="background-color: {color}; padding: 15px; border-radius: 10px; margin-bottom: 20px; color: black;">
-                        <h4>🌟 {r['Restaurant']}</h4>
-                        <p><strong>📍 Address:</strong> {r['Address']}</p>
-                        <p><strong>⭐ Rating:</strong> {r['Rating']} ({r['Reviews']} reviews)</p>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(f"### {r['Restaurant']}")
-                st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+            st.markdown(f"### {r['Restaurant']}")
+            st.markdown(f"**📍 Address:** {r['Address']}")
+            st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
 
             if r["Image"]:
                 st.markdown(
@@ -173,13 +150,11 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
+            # Show 2 reviews max
             tips = r.get("Tips", [])[:2]
             if tips:
                 st.markdown("💬 **Reviews:**")
                 for tip in tips:
                     st.markdown(f"• _{tip}_")
 
-            if r.get("IsBest", False):
-                st.markdown("</div>", unsafe_allow_html=True)
-            else:
-                st.markdown("---")
+            st.markdown("---")
