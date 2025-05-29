@@ -96,7 +96,7 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Restaurant": name,
                         "Address": address,
                         "Rating": 0,
-                        "Stars": "⭐" * 0,  # 0 stars
+                        "Stars": "",  # 0 stars
                         "Reviews": 0,
                         "Image": photo_url,
                         "Tips": []
@@ -121,12 +121,50 @@ if st.button("🔍 Search") and food and location and api_key:
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-# Display results
+# Display results and Top 3 picks
 if st.session_state.results:
+    # Sort top 3 by rating
+    top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
+
+    st.divider()
+    st.subheader("🏅 Top Picks")
+
+    cols = st.columns(3)
+    medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
+    colors = ["#FFD700", "#C0C0C0", "#CD7F32"]  # gold, silver, bronze
+
+    for i, (col, medal, color) in enumerate(zip(cols, medals, colors)):
+        if i < len(top3):
+            r = top3[i]
+            with col:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color: {color};
+                        border-radius: 15px;
+                        padding: 20px;
+                        text-align: center;
+                        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+                        color: black;
+                        font-weight: bold;
+                    ">
+                        <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
+                        <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
+                        <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            with col:
+                st.write("")
+
+    # Show restaurant table
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
+    # Highlight overall top pick metric
     top = max(st.session_state.results, key=lambda x: x["Rating"])
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
