@@ -87,15 +87,15 @@ if st.button("🔍 Search") and food and location and api_key:
                     "Stars": "⭐" * int(round(avg_rating)),
                     "Reviews": len(sentiments),
                     "Image": photo_url,
-                    "Tips": review_texts if review_texts else []
+                    "Tips": review_texts
                 })
 
-            # Determine best 3 by rating
-            best_3_ratings = sorted({r["Rating"] for r in results}, reverse=True)[:3]
+            # Mark best 3 restaurants
+            top_ratings = sorted({r["Rating"] for r in results}, reverse=True)[:3]
             for r in results:
-                r["IsBest"] = r["Rating"] in best_3_ratings
+                r["IsBest"] = r["Rating"] in top_ratings
 
-            # Save results
+            # Save DataFrame
             df = pd.DataFrame([
                 {
                     "Restaurant": r["Restaurant"],
@@ -117,8 +117,8 @@ if st.session_state.results:
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
-    best_overall = max(st.session_state.results, key=lambda x: x["Rating"])
-    st.metric(label="🏆 Top Pick", value=best_overall["Restaurant"], delta=f"{best_overall['Rating']} ⭐")
+    top = max(st.session_state.results, key=lambda x: x["Rating"])
+    st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
     st.divider()
     st.subheader("📸 Restaurant Highlights")
@@ -128,12 +128,18 @@ if st.session_state.results:
         1: "#d9ead3",  # green
         2: "#cfe2f3"   # blue
     }
+
+    # Map ratings to rank
+    rating_to_rank = {
+        rating: i for i, rating in enumerate(sorted({r["Rating"] for r in st.session_state.results}, reverse=True)[:3])
+    }
+
     cols = st.columns(2)
 
     for idx, r in enumerate(st.session_state.results):
         with cols[idx % 2]:
-            if r["IsBest"]:
-                rank = sorted(set([x["Rating"] for x in st.session_state.results]), reverse=True).index(r["Rating"])
+            if r.get("IsBest", False):
+                rank = rating_to_rank.get(r["Rating"], 2)
                 color = highlight_colors.get(rank, "#f4cccc")
                 st.markdown(
                     f"""
@@ -165,7 +171,7 @@ if st.session_state.results:
                 for tip in tips:
                     st.markdown(f"• _{tip}_")
 
-            if r["IsBest"]:
+            if r.get("IsBest", False):
                 st.markdown("</div>", unsafe_allow_html=True)
             else:
                 st.markdown("---")
