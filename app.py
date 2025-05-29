@@ -121,18 +121,13 @@ if st.button("🔍 Search") and food and location and api_key:
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-    # Show restaurant table
+# Display results, starting with the table
+if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
-    # Highlight overall top pick metric
-    top = max(st.session_state.results, key=lambda x: x["Rating"])
-    st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
-
-    # Display results and Top 3 picks
-if st.session_state.results:
-    # Sort top 3 by rating
+    # Top 3 picks below the table
     top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
     st.divider()
@@ -168,7 +163,9 @@ if st.session_state.results:
             with col:
                 st.write("")
 
-
+    # Highlight overall top pick metric
+    top = max(st.session_state.results, key=lambda x: x["Rating"])
+    st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
     st.divider()
     st.subheader("📸 Restaurant Highlights")
