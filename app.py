@@ -94,7 +94,26 @@ if st.session_state.page == "Recommend":
                     name = r['name']
                     address = r['location'].get('formatted_address', 'Unknown')
 
-                    # Fetch reviews
+                    # Price info (optional)
+                    price_info = r.get("price", {})
+                    price_str = price_info.get("currency", "") + price_info.get("tier", "")
+                    if not price_str:
+                        # fallback: sometimes price is just a number tier (1-4)
+                        price_tier = price_info.get("tier")
+                        price_str = "$" * price_tier if price_tier else "N/A"
+
+                    # Phone
+                    phone = r.get("phone", "N/A")
+
+                    # Hours
+                    hours_info = r.get("hours", {})
+                    hours_display = hours_info.get("display", "N/A")
+
+                    # Menu URL
+                    menu_info = r.get("menu", {})
+                    menu_url = menu_info.get("url", "N/A")
+
+                    # Fetch reviews (tips)
                     tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                     tips_res = requests.get(tips_url, headers=headers)
                     tips = tips_res.json()
@@ -124,7 +143,11 @@ if st.session_state.page == "Recommend":
                         "Stars": "⭐" * int(round(avg_rating)),
                         "Reviews": len(sentiments),
                         "Image": photo_url,
-                        "Tips": review_texts[:2]
+                        "Tips": review_texts[:2],
+                        "Price": price_str,
+                        "Phone": phone,
+                        "Hours": hours_display,
+                        "Menu": menu_url
                     })
 
                 # Save results
@@ -135,7 +158,8 @@ if st.session_state.page == "Recommend":
                             "Address": r["Address"],
                             "Average Rating": r["Rating"],
                             "Stars": r["Stars"],
-                            "Reviews": r["Reviews"]
+                            "Reviews": r["Reviews"],
+                            "Price": r["Price"]
                         }
                         for r in results
                     ])
@@ -186,6 +210,13 @@ if st.session_state.page == "Recommend":
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+                st.markdown(f"**💰 Price:** {r['Price']}")
+                st.markdown(f"**📞 Phone:** {r['Phone']}")
+                st.markdown(f"**⏰ Hours:** {r['Hours']}")
+                if r['Menu'] != "N/A":
+                    st.markdown(f"**📋 Menu:** [View Menu]({r['Menu']})")
+                else:
+                    st.markdown("**📋 Menu:** N/A")
 
                 if r["Image"]:
                     st.markdown(f"""
@@ -213,53 +244,37 @@ elif st.session_state.page == "Deep Learning":
     - Uses a pretrained **BERT sentiment analysis model** (`nlptown/bert-base-multilingual-uncased-sentiment`) to analyze each review.
     - Aggregates the sentiment scores into an average rating per restaurant.
     - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
+    """)
 
-    ### About the AI model:
+    st.markdown("### About the AI model:")
+    st.markdown("""
     - The model classifies reviews into 1-5 star sentiment labels.
     - It's multilingual and robust for various languages.
     - Sentiment analysis is performed on review snippets capped at 512 tokens.
-
-    This allows the app to recommend restaurants not just by popularity but by real user experience and sentiment.
     """)
 
-    st.markdown("---")
-    st.header("📊 Sentiment Analysis Visualization")
-
-    # Example sentiment distribution data (replace with real data if you want)
-    stars = [1, 2, 3, 4, 5]
-    counts = [15, 30, 50, 70, 90]  # Sample counts of reviews per star rating
-
-    fig1, ax1 = plt.subplots()
-    ax1.bar(stars, counts, color='skyblue')
-    ax1.set_xlabel("Star Rating")
-    ax1.set_ylabel("Number of Reviews")
-    ax1.set_title("Distribution of Sentiment Star Ratings")
-    ax1.set_xticks(stars)
-    st.pyplot(fig1)
-
+    st.markdown("### Deep Learning Algorithm Analysis:")
     st.markdown("""
-    The bar chart above shows how the BERT sentiment model classifies user reviews into star ratings from 1 to 5 stars. 
-    Most reviews cluster around 4 and 5 stars, indicating positive feedback.
+    The sentiment analysis uses a **Transformer-based BERT model** fine-tuned for multilingual sentiment classification.
+    
+    - **Architecture:** BERT (Bidirectional Encoder Representations from Transformers) processes the input text bidirectionally, capturing context from both left and right words.
+    - **Fine-tuning:** The model is fine-tuned on large-scale multilingual review datasets, enabling it to predict sentiment scores from 1 to 5 stars.
+    - **Strengths:** The bidirectional nature allows better understanding of nuanced sentiments compared to traditional models.
+    - **Limitations:** Performance may vary depending on the language and domain-specific vocabulary. It is also limited to analyzing short review snippets (max 512 tokens).
+    
+    This approach provides nuanced sentiment ratings which are aggregated to produce an overall AI-driven rating for restaurants, improving recommendation quality.
     """)
 
-    st.markdown("---")
-    st.header("📈 Average Restaurant Ratings")
-
-    # Example average ratings data (replace with your actual results if available)
-    example_restaurants = ["Sushi Place", "Jollof King", "Pizza House", "Burger Shack", "Vegan Delight"]
-    avg_ratings = [4.2, 3.8, 4.5, 3.6, 4.0]
-
-    fig2, ax2 = plt.subplots()
-    ax2.barh(example_restaurants, avg_ratings, color='lightgreen')
-    ax2.set_xlabel("Average Rating")
-    ax2.set_xlim(0, 5)
-    ax2.set_title("Average Sentiment Rating per Restaurant")
-    st.pyplot(fig2)
-
-    st.markdown("""
-    The horizontal bar chart above displays average sentiment ratings for various restaurants, calculated by averaging individual review sentiments. 
-    This helps users easily identify top-rated places based on genuine customer feedback.
-    """)
+    # Optional: sentiment distribution chart example (if you want)
+    st.markdown("### Sentiment Distribution Example")
+    sample_sentiments = [5,4,4,3,5,2,4,3,5,5,4,3,4]
+    counts = pd.Series(sample_sentiments).value_counts().sort_index()
+    fig, ax = plt.subplots()
+    counts.plot(kind='bar', ax=ax, color='skyblue')
+    ax.set_xlabel("Sentiment Stars")
+    ax.set_ylabel("Number of Reviews")
+    ax.set_title("Sample Sentiment Distribution")
+    st.pyplot(fig)
 
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
