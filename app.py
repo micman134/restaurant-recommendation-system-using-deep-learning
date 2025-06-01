@@ -5,8 +5,27 @@ from transformers import pipeline
 
 # Page setup
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
-st.title("🍽️ AI Restaurant Recommender")
-st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
+
+# Hide Streamlit Cloud default UI elements
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stDeployButton {visibility: hidden;}
+    [data-testid="stStatusWidget"] {visibility: hidden;}
+    header {visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# Custom header
+st.markdown("""
+    <div style="background-color:#1f77b4;padding:15px;border-radius:10px;margin-bottom:20px">
+        <h1 style="color:white;text-align:center;">Welcome to the AI Restaurant Recommender 🍽️</h1>
+    </div>
+""", unsafe_allow_html=True)
+
+st.markdown("Find top-rated restaurants near you using <strong>Foursquare</strong> and <strong>AI sentiment analysis</strong> of real user reviews.", unsafe_allow_html=True)
 
 # Initialize session state
 if "results" not in st.session_state:
@@ -15,12 +34,12 @@ if "results" not in st.session_state:
 
 # Input section
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
+    col1, _ = st.columns([1, 1])
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
+    col1, _ = st.columns([1, 1])
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
@@ -58,7 +77,6 @@ if st.button("🔍 Search") and food and location and api_key:
                 name = r['name']
                 address = r['location'].get('formatted_address', 'Unknown')
 
-                # Fetch tips
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
@@ -70,7 +88,6 @@ if st.button("🔍 Search") and food and location and api_key:
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
-                # Fetch image
                 photo_url = ""
                 photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                 photo_res = requests.get(photo_api, headers=headers)
@@ -91,18 +108,16 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Tips": review_texts if review_texts else []
                     })
                 else:
-                    # If no reviews, show restaurant with 0 reviews
                     results.append({
                         "Restaurant": name,
                         "Address": address,
                         "Rating": 0,
-                        "Stars": "",  # 0 stars
+                        "Stars": "",
                         "Reviews": 0,
                         "Image": photo_url,
                         "Tips": []
                     })
 
-            # Save results to session state
             if results:
                 df = pd.DataFrame([
                     {
@@ -115,19 +130,18 @@ if st.button("🔍 Search") and food and location and api_key:
                     for r in results
                 ])
 
-                df.index = df.index + 1  # Start table index from 1
+                df.index = df.index + 1
                 st.session_state.results = results
                 st.session_state.df = df
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-# Display results, starting with the table
+# Display results
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
-    # Top 3 picks below the table
     top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
     st.divider()
@@ -135,7 +149,7 @@ if st.session_state.results:
 
     cols = st.columns(3)
     medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
-    colors = ["#FFD700", "#C0C0C0", "#CD7F32"]  # gold, silver, bronze
+    colors = ["#FFD700", "#C0C0C0", "#CD7F32"]
 
     for i, (col, medal, color) in enumerate(zip(cols, medals, colors)):
         if i < len(top3):
@@ -163,7 +177,6 @@ if st.session_state.results:
             with col:
                 st.write("")
 
-    # Highlight overall top pick metric
     top = max(st.session_state.results, key=lambda x: x["Rating"])
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
@@ -187,7 +200,6 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
-            # Show 2 reviews max
             tips = r.get("Tips", [])[:2]
             if tips:
                 st.markdown("💬 **Reviews:**")
@@ -195,3 +207,10 @@ if st.session_state.results:
                     st.markdown(f"• _{tip}_")
 
             st.markdown("---")
+
+# Custom footer
+st.markdown("""
+    <div style="text-align:center; padding:10px; margin-top:40px; font-size:14px; color:gray;">
+        Made with ❤️ by MO Neachi | ©2025 All Rights Reserved
+    </div>
+""", unsafe_allow_html=True)
