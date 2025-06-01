@@ -6,26 +6,44 @@ from transformers import pipeline
 # Page setup
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Hide Streamlit Cloud default UI elements
-hide_streamlit_style = """
-    <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    .stDeployButton {visibility: hidden;}
-    [data-testid="stStatusWidget"] {visibility: hidden;}
-    header {visibility: hidden;}
-    </style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-# Custom header
+# Custom Header with menu
 st.markdown("""
-    <div style="background-color:#1f77b4;padding:15px;border-radius:10px;margin-bottom:20px">
-        <h1 style="color:white;text-align:center;">Welcome to the AI Restaurant Recommender 🍽️</h1>
+    <style>
+    .custom-header {
+        background-color: #f8f9fa;
+        padding: 10px 20px;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .menu {
+        display: flex;
+        gap: 20px;
+        font-weight: 500;
+    }
+    .menu a {
+        text-decoration: none;
+        color: #333;
+    }
+    .footer {
+        text-align: center;
+        font-size: 14px;
+        color: #888;
+        margin-top: 40px;
+        padding: 20px;
+        border-top: 1px solid #eee;
+    }
+    </style>
+    <div class="custom-header">
+        <div style="font-size: 22px; font-weight: bold;">🍽️ AI Restaurant Recommender</div>
+        <div class="menu">
+            <a href="#">Recommend</a>
+            <a href="#">Deep Learning</a>
+            <a href="#">About</a>
+        </div>
     </div>
 """, unsafe_allow_html=True)
-
-st.markdown("Find top-rated restaurants near you using <strong>Foursquare</strong> and <strong>AI sentiment analysis</strong> of real user reviews.", unsafe_allow_html=True)
 
 # Initialize session state
 if "results" not in st.session_state:
@@ -77,6 +95,7 @@ if st.button("🔍 Search") and food and location and api_key:
                 name = r['name']
                 address = r['location'].get('formatted_address', 'Unknown')
 
+                # Fetch tips
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
@@ -88,6 +107,7 @@ if st.button("🔍 Search") and food and location and api_key:
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
+                # Fetch image
                 photo_url = ""
                 photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                 photo_res = requests.get(photo_api, headers=headers)
@@ -208,9 +228,9 @@ if st.session_state.results:
 
             st.markdown("---")
 
-# Custom footer
+# Footer
 st.markdown("""
-    <div style="text-align:center; padding:10px; margin-top:40px; font-size:14px; color:gray;">
-        Made with ❤️ by MO Neachi | ©2025 All Rights Reserved
+    <div class="footer">
+        &copy; 2025 AI Restaurant Recommender &middot; Built with ❤️ using Streamlit
     </div>
 """, unsafe_allow_html=True)
