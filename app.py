@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
+import matplotlib.pyplot as plt
 
 # Set page configuration — must be FIRST
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -201,8 +202,6 @@ if st.session_state.page == "Recommend":
                 st.markdown("---")
 
 # -------- PAGE: Deep Learning --------
-import matplotlib.pyplot as plt
-
 elif st.session_state.page == "Deep Learning":
     st.title("🤖 Deep Learning Explained")
     st.markdown("""
@@ -226,9 +225,9 @@ elif st.session_state.page == "Deep Learning":
     st.markdown("---")
     st.header("📊 Sentiment Analysis Visualization")
 
-    # Example sentiment distribution data (you can replace with real data)
+    # Example sentiment distribution data (replace with real data if you want)
     stars = [1, 2, 3, 4, 5]
-    counts = [15, 30, 50, 70, 90]  # Example counts of reviews per star rating
+    counts = [15, 30, 50, 70, 90]  # Sample counts of reviews per star rating
 
     fig1, ax1 = plt.subplots()
     ax1.bar(stars, counts, color='skyblue')
