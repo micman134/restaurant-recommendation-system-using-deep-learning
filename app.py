@@ -3,137 +3,69 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# Page config
+# Set page configuration — must be FIRST
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Sidebar toggle state
-if "sidebar_open" not in st.session_state:
-    st.session_state.sidebar_open = True
-
-def toggle_sidebar():
-    st.session_state.sidebar_open = not st.session_state.sidebar_open
-
-# Custom CSS for layout, sidebar, main content, toggle button, and hiding Streamlit default UI
-st.markdown(
-    """
+# Inject custom CSS to remove default icons and add header/footer
+st.markdown("""
     <style>
-    /* Hide default Streamlit menu, footer, header */
+    /* Hide Streamlit default UI */
     #MainMenu, footer, header {visibility: hidden;}
-
-    /* Layout container with sidebar and main content side by side */
-    .app-container {
-        display: flex;
-        height: 100vh;
-        overflow: hidden;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
+        display: none !important;
     }
 
-    /* Sidebar styling */
-    .sidebar {
+    /* Custom dark header */
+    .custom-header {
         background-color: #111;
         color: white;
-        width: 250px;
-        padding: 1rem 1.5rem;
-        transition: width 0.3s ease;
-        overflow-y: auto;
-        flex-shrink: 0;
-    }
-    .sidebar.closed {
-        width: 0;
-        padding: 0;
-        overflow: hidden;
-    }
-
-    /* Sidebar nav links */
-    .sidebar .brand {
-        font-size: 20px;
-        font-weight: bold;
-        margin-bottom: 2rem;
+        padding: 1rem 2rem;
+        font-size: 18px;
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: 10px;
+        margin-bottom: 20px;
     }
-    .sidebar .brand img {
-        height: 32px;
-        width: 32px;
-        border-radius: 50%;
-    }
-    .sidebar .nav-links {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-    .sidebar .nav-links a {
+    .custom-header .nav-links a {
         color: white;
         text-decoration: none;
+        margin-left: 2rem;
         font-weight: bold;
-        font-size: 16px;
     }
-    .sidebar .nav-links a:hover {
+    .custom-header .nav-links a:hover {
         text-decoration: underline;
     }
 
-    /* Main content area */
-    .main-content {
-        flex-grow: 1;
-        padding: 1rem 2rem;
-        overflow-y: auto;
-        background-color: #f9f9f9;
-    }
-
-    /* Toggle button styling */
-    .toggle-btn {
-        background-color: #111;
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        cursor: pointer;
-        font-size: 16px;
-        margin-bottom: 1rem;
-        border-radius: 5px;
+    /* Custom footer */
+    .custom-footer {
+        text-align: center;
+        font-size: 14px;
+        margin-top: 50px;
+        padding: 20px;
+        color: #aaa;
     }
     </style>
-    """,
-    unsafe_allow_html=True,
-)
 
-# Determine sidebar class (open/closed)
-sidebar_class = "sidebar" if st.session_state.sidebar_open else "sidebar closed"
-
-# Start layout container
-st.markdown(
-    f"""
-    <div class="app-container">
-        <div class="{sidebar_class}">
-            <div class="brand">
-                <img src="https://cdn-icons-png.flaticon.com/512/3075/3075977.png" />
-                🍽️ AI Restaurant Recommender
-            </div>
-            <div class="nav-links">
-                <a href="#">Recommend</a>
-                <a href="#">Deep Learning</a>
-                <a href="#">About</a>
-            </div>
+    <div class="custom-header">
+        <div>🍽️ AI Restaurant Recommender</div>
+        <div class="nav-links">
+            <a href="#">Recommend</a>
+            <a href="#">Deep Learning</a>
+            <a href="#">About</a>
         </div>
-        <div class="main-content">
-    """,
-    unsafe_allow_html=True,
-)
+    </div>
+""", unsafe_allow_html=True)
 
-# Toggle sidebar button inside main content
-if st.button("🔀 Toggle Sidebar"):
-    toggle_sidebar()
-
-# Main app content starts here
-
+# App introduction
+st.title("🍽️ AI Restaurant Recommender")
 st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-# Initialize session state variables
+# Session state
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
 
-# Input fields for food and location
+# Inputs
 with st.container():
     col1, _ = st.columns([1, 1])
     with col1:
@@ -144,10 +76,10 @@ with st.container():
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-# Foursquare API Key (put your key in Streamlit secrets)
+# API key
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-# Search logic
+# Search action
 if st.button("🔍 Search") and food and location and api_key:
     st.session_state.results = None
     st.session_state.df = None
@@ -177,6 +109,7 @@ if st.button("🔍 Search") and food and location and api_key:
                 name = r['name']
                 address = r['location'].get('formatted_address', 'Unknown')
 
+                # Fetch reviews
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
@@ -188,6 +121,7 @@ if st.button("🔍 Search") and food and location and api_key:
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
+                # Fetch photo
                 photo_url = ""
                 photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                 photo_res = requests.get(photo_api, headers=headers)
@@ -196,6 +130,7 @@ if st.button("🔍 Search") and food and location and api_key:
                     photo = photos[0]
                     photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
+                # Append result
                 avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
                 results.append({
                     "Restaurant": name,
@@ -207,6 +142,7 @@ if st.button("🔍 Search") and food and location and api_key:
                     "Tips": review_texts[:2]
                 })
 
+            # Save results
             if results:
                 df = pd.DataFrame([
                     {
@@ -224,16 +160,18 @@ if st.button("🔍 Search") and food and location and api_key:
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-# Display results table and details if any
+# Display results
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
+    # Top 3 picks
+    top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
+
     st.divider()
     st.subheader("🏅 Top 3 Picks")
 
-    top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
     cols = st.columns(3)
     medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
     colors = ["#FFD700", "#C0C0C0", "#CD7F32"]
@@ -243,24 +181,17 @@ if st.session_state.results:
             r = top3[i]
             with col:
                 st.markdown(f"""
-                <div style="
-                    background-color: {color};
-                    border-radius: 15px;
-                    padding: 20px;
-                    text-align: center;
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                    color: black;
-                    font-weight: bold;
-                ">
-                    <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
-                    <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
-                    <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
-                </div>
+                    <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
+                        <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
+                        <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
+                        <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
+                    </div>
                 """, unsafe_allow_html=True)
 
     top = max(st.session_state.results, key=lambda x: x["Rating"])
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
+    # Images and reviews
     st.divider()
     st.subheader("📸 Restaurant Highlights")
 
@@ -282,13 +213,12 @@ if st.session_state.results:
                 st.markdown("💬 **Reviews:**")
                 for tip in r["Tips"]:
                     st.markdown(f"• _{tip}_")
+
             st.markdown("---")
 
-# Footer inside main content
+# Footer
 st.markdown("""
-    <div style="margin-top: 3rem; font-size: 14px; color: #666; text-align: center;">
-        Built with ❤️ using Streamlit, Foursquare, and HuggingFace
+    <div class="custom-footer">
+        © 2025 AI Restaurant Recommender · Built with 🤖 + 🍴
     </div>
 """, unsafe_allow_html=True)
-
-# Close main-content and
