@@ -230,11 +230,6 @@ elif st.session_state.page == "About":
     - AI sentiment analysis,
     - And Foursquare's extensive location data.
 
-    **Created by:** Your Name  
-    **Contact:** your.email@example.com  
-    **GitHub:** [github.com/yourprofile](https://github.com/yourprofile)  
-    **LinkedIn:** [linkedin.com/in/yourprofile](https://linkedin.com/in/yourprofile)
-
     Thanks for trying out the app! 🍽️
     """)
 
