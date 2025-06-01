@@ -3,47 +3,53 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# Page setup
-st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
-
-# Custom Header with menu
-st.markdown("""
+# Custom CSS to hide Streamlit default menu and GitHub icon, style header/footer
+hide_streamlit_style = """
     <style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
     .custom-header {
-        background-color: #f8f9fa;
-        padding: 10px 20px;
-        border-bottom: 1px solid #dee2e6;
+        background-color: #1a1a1a;
+        padding: 20px;
+        color: white;
         display: flex;
         justify-content: space-between;
         align-items: center;
     }
-    .menu {
-        display: flex;
-        gap: 20px;
-        font-weight: 500;
-    }
-    .menu a {
+    .custom-header a {
+        color: white;
+        margin-left: 20px;
         text-decoration: none;
-        color: #333;
+        font-weight: bold;
     }
-    .footer {
+    .custom-footer {
+        margin-top: 50px;
+        padding: 10px;
         text-align: center;
-        font-size: 14px;
         color: #888;
-        margin-top: 40px;
-        padding: 20px;
-        border-top: 1px solid #eee;
+        font-size: 14px;
     }
     </style>
-    <div class="custom-header">
-        <div style="font-size: 22px; font-weight: bold;">🍽️ AI Restaurant Recommender</div>
-        <div class="menu">
-            <a href="#">Recommend</a>
-            <a href="#">Deep Learning</a>
-            <a href="#">About</a>
-        </div>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+# Custom header
+st.markdown("""
+<div class="custom-header">
+    <div style="font-size: 24px; font-weight: bold;">🍽️ AI Restaurant Recommender</div>
+    <div>
+        <a href="#">Recommend</a>
+        <a href="#">Deep Learning</a>
+        <a href="#">About</a>
     </div>
+</div>
 """, unsafe_allow_html=True)
+
+# Page setup
+st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
+st.title("🍽️ AI Restaurant Recommender")
+st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
 # Initialize session state
 if "results" not in st.session_state:
@@ -52,12 +58,12 @@ if "results" not in st.session_state:
 
 # Input section
 with st.container():
-    col1, _ = st.columns([1, 1])
+    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
 with st.container():
-    col1, _ = st.columns([1, 1])
+    col1, _ = st.columns([1, 1])  # Left-aligned, 50% width
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
@@ -128,16 +134,18 @@ if st.button("🔍 Search") and food and location and api_key:
                         "Tips": review_texts if review_texts else []
                     })
                 else:
+                    # If no reviews, show restaurant with 0 reviews
                     results.append({
                         "Restaurant": name,
                         "Address": address,
                         "Rating": 0,
-                        "Stars": "",
+                        "Stars": "",  # 0 stars
                         "Reviews": 0,
                         "Image": photo_url,
                         "Tips": []
                     })
 
+            # Save results to session state
             if results:
                 df = pd.DataFrame([
                     {
@@ -150,18 +158,19 @@ if st.button("🔍 Search") and food and location and api_key:
                     for r in results
                 ])
 
-                df.index = df.index + 1
+                df.index = df.index + 1  # Start table index from 1
                 st.session_state.results = results
                 st.session_state.df = df
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-# Display results
+# Display results, starting with the table
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
+    # Top 3 picks below the table
     top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
     st.divider()
@@ -169,7 +178,7 @@ if st.session_state.results:
 
     cols = st.columns(3)
     medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
-    colors = ["#FFD700", "#C0C0C0", "#CD7F32"]
+    colors = ["#FFD700", "#C0C0C0", "#CD7F32"]  # gold, silver, bronze
 
     for i, (col, medal, color) in enumerate(zip(cols, medals, colors)):
         if i < len(top3):
@@ -197,6 +206,7 @@ if st.session_state.results:
             with col:
                 st.write("")
 
+    # Highlight overall top pick metric
     top = max(st.session_state.results, key=lambda x: x["Rating"])
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
@@ -220,6 +230,7 @@ if st.session_state.results:
                     unsafe_allow_html=True
                 )
 
+            # Show 2 reviews max
             tips = r.get("Tips", [])[:2]
             if tips:
                 st.markdown("💬 **Reviews:**")
@@ -228,9 +239,9 @@ if st.session_state.results:
 
             st.markdown("---")
 
-# Footer
+# Custom footer
 st.markdown("""
-    <div class="footer">
-        &copy; 2025 AI Restaurant Recommender &middot; Built with ❤️ using Streamlit
-    </div>
+<div class="custom-footer">
+    © 2025 AI Restaurant Recommender 
+</div>
 """, unsafe_allow_html=True)
