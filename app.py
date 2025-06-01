@@ -278,6 +278,6 @@ elif st.session_state.page == "About":
 # Footer (always displayed)
 st.markdown("""
     <div class="custom-footer">
-        © 2025 AI Restaurant Recommender · Built with 🤖 + 🍴
+        © 2025 AI (Deep Learning) Restaurant Recommender Final Year Project·
     </div>
 """, unsafe_allow_html=True)
