@@ -3,112 +3,137 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# Set page config at the top
+# Page config
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Custom CSS for hiding default Streamlit menu/icons and adding a sticky left sidebar
-st.markdown("""
+# Sidebar toggle state
+if "sidebar_open" not in st.session_state:
+    st.session_state.sidebar_open = True
+
+def toggle_sidebar():
+    st.session_state.sidebar_open = not st.session_state.sidebar_open
+
+# Custom CSS for layout, sidebar, main content, toggle button, and hiding Streamlit default UI
+st.markdown(
+    """
     <style>
-    /* Hide default Streamlit menu and icons */
+    /* Hide default Streamlit menu, footer, header */
     #MainMenu, footer, header {visibility: hidden;}
-    .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
-        display: none !important;
+
+    /* Layout container with sidebar and main content side by side */
+    .app-container {
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
-    /* Left sidebar style */
-    .sidebar-content {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 250px;
-        height: 100vh;
+    /* Sidebar styling */
+    .sidebar {
         background-color: #111;
         color: white;
-        padding: 2rem 1rem;
-        font-size: 18px;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-start;
-        z-index: 1000;
+        width: 250px;
+        padding: 1rem 1.5rem;
+        transition: width 0.3s ease;
         overflow-y: auto;
+        flex-shrink: 0;
+    }
+    .sidebar.closed {
+        width: 0;
+        padding: 0;
+        overflow: hidden;
     }
 
-    .sidebar-content .brand {
-        display: flex;
-        align-items: center;
-        font-size: 22px;
+    /* Sidebar nav links */
+    .sidebar .brand {
+        font-size: 20px;
         font-weight: bold;
         margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }
-
-    .sidebar-content .brand img {
-        height: 40px;
-        width: 40px;
-        margin-right: 10px;
+    .sidebar .brand img {
+        height: 32px;
+        width: 32px;
         border-radius: 50%;
     }
-
-    .sidebar-content a {
+    .sidebar .nav-links {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    .sidebar .nav-links a {
         color: white;
         text-decoration: none;
-        margin-bottom: 1rem;
         font-weight: bold;
-        cursor: pointer;
+        font-size: 16px;
     }
-
-    .sidebar-content a:hover {
+    .sidebar .nav-links a:hover {
         text-decoration: underline;
     }
 
-    /* Push main content right to avoid sidebar overlap */
+    /* Main content area */
     .main-content {
-        margin-left: 270px;
+        flex-grow: 1;
         padding: 1rem 2rem;
+        overflow-y: auto;
+        background-color: #f9f9f9;
     }
 
-    /* Responsive: sidebar fixed on wider screens, collapses on mobile */
-    @media screen and (max-width: 768px) {
-        .sidebar-content {
-            position: relative;
-            width: 100%;
-            height: auto;
-            flex-direction: row;
-            padding: 1rem;
-            justify-content: space-around;
-        }
-        .sidebar-content .brand {
-            margin-bottom: 0;
-        }
-        .main-content {
-            margin-left: 0;
-            padding: 1rem;
-        }
+    /* Toggle button styling */
+    .toggle-btn {
+        background-color: #111;
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        font-size: 16px;
+        margin-bottom: 1rem;
+        border-radius: 5px;
     }
     </style>
+    """,
+    unsafe_allow_html=True,
+)
 
-    <div class="sidebar-content">
-        <div class="brand">
-            <img src="https://cdn-icons-png.flaticon.com/512/3075/3075977.png" />
-            🍽️ AI Restaurant Recommender
+# Determine sidebar class (open/closed)
+sidebar_class = "sidebar" if st.session_state.sidebar_open else "sidebar closed"
+
+# Start layout container
+st.markdown(
+    f"""
+    <div class="app-container">
+        <div class="{sidebar_class}">
+            <div class="brand">
+                <img src="https://cdn-icons-png.flaticon.com/512/3075/3075977.png" />
+                🍽️ AI Restaurant Recommender
+            </div>
+            <div class="nav-links">
+                <a href="#">Recommend</a>
+                <a href="#">Deep Learning</a>
+                <a href="#">About</a>
+            </div>
         </div>
-        <a href="#">Recommend</a>
-        <a href="#">Deep Learning</a>
-        <a href="#">About</a>
-    </div>
-""", unsafe_allow_html=True)
+        <div class="main-content">
+    """,
+    unsafe_allow_html=True,
+)
 
-# Wrap the whole app content inside a div with margin-left so it won't be hidden behind sidebar
-st.markdown('<div class="main-content">', unsafe_allow_html=True)
+# Toggle sidebar button inside main content
+if st.button("🔀 Toggle Sidebar"):
+    toggle_sidebar()
 
-# App description
+# Main app content starts here
+
 st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-# Session state init
+# Initialize session state variables
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
 
-# Input fields
+# Input fields for food and location
 with st.container():
     col1, _ = st.columns([1, 1])
     with col1:
@@ -119,7 +144,7 @@ with st.container():
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-# Foursquare API Key
+# Foursquare API Key (put your key in Streamlit secrets)
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
 # Search logic
@@ -199,7 +224,7 @@ if st.button("🔍 Search") and food and location and api_key:
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-# Display results
+# Display results table and details if any
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
@@ -259,11 +284,11 @@ if st.session_state.results:
                     st.markdown(f"• _{tip}_")
             st.markdown("---")
 
-# Footer
+# Footer inside main content
 st.markdown("""
-    <div class="custom-footer" style="margin-left:270px; color:#aaa; padding: 20px 0; text-align: center;">
+    <div style="margin-top: 3rem; font-size: 14px; color: #666; text-align: center;">
         Built with ❤️ using Streamlit, Foursquare, and HuggingFace
     </div>
 """, unsafe_allow_html=True)
 
-st.markdown('</div>', unsafe_allow_html=True)  # close main-content div
+# Close main-content and
