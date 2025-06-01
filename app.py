@@ -210,7 +210,6 @@ if st.session_state.page == "Recommend":
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
-                st.markdown(f"**📞 Phone:** {r['Phone']}")
                 st.markdown(f"**⏰ Hours:** {r['Hours']}")
                 if r['Menu'] != "N/A":
                     st.markdown(f"**📋 Menu:** [View Menu]({r['Menu']})")
