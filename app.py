@@ -156,7 +156,7 @@ if st.session_state.page == "Recommend":
         top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
         st.divider()
-        st.subheader("🏅 AI Top Picks")
+        st.subheader("🏅 AI (Deep Learning) Top Picks")
 
         cols = st.columns(3)
         medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
