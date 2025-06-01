@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # Custom CSS to hide Streamlit default menu and GitHub icon, style header/footer
 hide_streamlit_style = """
     <style>
@@ -32,7 +34,6 @@ hide_streamlit_style = """
     }
     </style>
 """
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 # Custom header
 st.markdown("""
