@@ -170,7 +170,7 @@ if st.session_state.page == "Recommend":
                         <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
                             <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
                             <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
-                            <div style="font-size: 19px; margin-bottom: 8px;">{r['Address']}</div>
+                            <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                         </div>
                     """, unsafe_allow_html=True)
