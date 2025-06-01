@@ -82,8 +82,7 @@ if st.session_state.page == "Recommend":
 
             res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
             restaurants = res.json().get("results", [])
-            st.subheader("Raw JSON Response for Places Search")
-            st.json(res.json())
+           
 
             if not restaurants:
                 st.error("❌ No restaurants found. Try different search terms.")
