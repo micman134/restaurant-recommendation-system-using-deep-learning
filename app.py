@@ -3,86 +3,147 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# Set page config at the top
+# Set page config
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Custom CSS for sticky header, responsive nav, and hidden Streamlit icons
-st.markdown("""
+# Initialize session state for theme
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = True
+
+# Dark/Light toggle UI
+def toggle_theme():
+    st.session_state.dark_mode = not st.session_state.dark_mode
+
+toggle_col, _ = st.columns([0.1, 0.9])
+with toggle_col:
+    st.button("🌙" if st.session_state.dark_mode else "☀️", on_click=toggle_theme)
+
+# CSS depending on dark/light mode
+if st.session_state.dark_mode:
+    bg_color = "#111"
+    text_color = "white"
+    card_bg = "#222"
+    link_hover = "#ddd"
+else:
+    bg_color = "white"
+    text_color = "#111"
+    card_bg = "#f8f8f8"
+    link_hover = "#333"
+
+# Custom CSS
+st.markdown(f"""
     <style>
     /* Hide default Streamlit menu and icons */
-    #MainMenu, footer, header {visibility: hidden;}
-    .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
+    #MainMenu, footer, header {{visibility: hidden;}}
+    .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {{
         display: none !important;
-    }
+    }}
 
-    /* Sticky dark header */
-    .custom-header {
+    /* Sticky header */
+    .custom-header {{
         position: sticky;
         top: 0;
         z-index: 999;
-        background-color: #111;
-        color: white;
+        background-color: {bg_color};
+        color: {text_color};
         padding: 1rem 2rem;
         font-size: 18px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         flex-wrap: wrap;
-    }
+        transition: background-color 0.3s ease;
+    }}
 
-    .custom-header .brand {
+    .custom-header .brand {{
         display: flex;
         align-items: center;
         font-size: 20px;
         font-weight: bold;
-    }
+        transition: color 0.3s ease;
+    }}
 
-    .custom-header .brand img {
+    .custom-header .brand img {{
         height: 32px;
         width: 32px;
         margin-right: 10px;
         border-radius: 50%;
-    }
+    }}
 
-    .custom-header .nav-links {
+    .custom-header .nav-links {{
         display: flex;
         flex-wrap: wrap;
         margin-top: 10px;
-    }
+    }}
 
-    .custom-header .nav-links a {
-        color: white;
+    .custom-header .nav-links a {{
+        color: {text_color};
         text-decoration: none;
         margin-left: 2rem;
         font-weight: bold;
-    }
+        transition: color 0.3s ease;
+    }}
 
-    .custom-header .nav-links a:hover {
+    .custom-header .nav-links a:hover {{
+        color: {link_hover};
         text-decoration: underline;
-    }
+    }}
 
     /* Mobile nav */
-    @media screen and (max-width: 768px) {
-        .custom-header {
+    @media screen and (max-width: 768px) {{
+        .custom-header {{
             flex-direction: column;
             align-items: flex-start;
-        }
-        .custom-header .nav-links {
+        }}
+        .custom-header .nav-links {{
             margin-top: 10px;
             flex-direction: column;
-        }
-        .custom-header .nav-links a {
+        }}
+        .custom-header .nav-links a {{
             margin: 0.5rem 0;
-        }
-    }
+        }}
+    }}
 
-    .custom-footer {
+    /* Cards */
+    .restaurant-card {{
+        background-color: {card_bg};
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }}
+
+    .restaurant-card:hover {{
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+    }}
+
+    /* Footer */
+    .custom-footer {{
         text-align: center;
         font-size: 14px;
         margin-top: 50px;
         padding: 20px;
-        color: #aaa;
-    }
+        color: {text_color};
+        border-top: 1px solid #666;
+    }}
+
+    /* Loading animation spinner */
+    .loader {{
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid {link_hover};
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }}
+
+    @keyframes spin {{
+      0% {{ transform: rotate(0deg); }}
+      100% {{ transform: rotate(360deg); }}
+    }}
     </style>
 
     <div class="custom-header">
@@ -99,7 +160,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # App description
-st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
+st.markdown(f"<p style='color:{text_color}'>Find top-rated restaurants near you using <b>Foursquare</b> and <b>AI sentiment analysis</b> of real user reviews.</p>", unsafe_allow_html=True)
 
 # Session state init
 if "results" not in st.session_state:
@@ -117,10 +178,8 @@ with st.container():
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-# Foursquare API Key
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-# Search logic
 if st.button("🔍 Search") and food and location and api_key:
     st.session_state.results = None
     st.session_state.df = None
@@ -197,7 +256,7 @@ if st.button("🔍 Search") and food and location and api_key:
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-# Display results
+# Display results with hover animation cards
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
@@ -216,15 +275,7 @@ if st.session_state.results:
             r = top3[i]
             with col:
                 st.markdown(f"""
-                <div style="
-                    background-color: {color};
-                    border-radius: 15px;
-                    padding: 20px;
-                    text-align: center;
-                    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-                    color: black;
-                    font-weight: bold;
-                ">
+                <div class="restaurant-card" style="background-color:{color}; color:black; font-weight:bold; text-align:center;">
                     <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
                     <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
                     <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
@@ -240,9 +291,12 @@ if st.session_state.results:
     cols = st.columns(2)
     for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
         with cols[idx % 2]:
-            st.markdown(f"### {r['Restaurant']}")
-            st.markdown(f"**📍 Address:** {r['Address']}")
-            st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+            st.markdown(f"""
+            <div class="restaurant-card">
+                <h3>{r['Restaurant']}</h3>
+                <p><b>📍 Address:</b> {r['Address']}</p>
+                <p><b>⭐ Rating:</b> {r['Rating']} ({r['Reviews']} reviews)</p>
+            """, unsafe_allow_html=True)
 
             if r["Image"]:
                 st.markdown(f"""
@@ -255,10 +309,10 @@ if st.session_state.results:
                 st.markdown("💬 **Reviews:**")
                 for tip in r["Tips"]:
                     st.markdown(f"• _{tip}_")
-            st.markdown("---")
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # Footer
-st.markdown("""
+st.markdown(f"""
     <div class="custom-footer">
         Built with ❤️ using Streamlit, Foursquare, and HuggingFace
     </div>
