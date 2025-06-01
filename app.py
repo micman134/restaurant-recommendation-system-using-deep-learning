@@ -3,66 +3,64 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# Must be the first Streamlit command
+# Set page configuration — must be FIRST
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Custom Header and Style
+# Inject custom CSS to remove default icons and add header/footer
 st.markdown("""
-   <style>
-/* Hide Streamlit default icons */
-#MainMenu, footer, header {visibility: hidden;}
+    <style>
+    /* Hide Streamlit default UI */
+    #MainMenu, footer, header {visibility: hidden;}
+    .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
+        display: none !important;
+    }
 
-/* Also hide the top-right floating toolbar (share, star, GitHub) */
-.stDeployButton,
-.st-emotion-cache-13ln4jf,  /* deployment status */
-button[kind="icon"] {
-    display: none !important;
-}
+    /* Custom dark header */
+    .custom-header {
+        background-color: #111;
+        color: white;
+        padding: 1rem 2rem;
+        font-size: 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .custom-header .nav-links a {
+        color: white;
+        text-decoration: none;
+        margin-left: 2rem;
+        font-weight: bold;
+    }
+    .custom-header .nav-links a:hover {
+        text-decoration: underline;
+    }
 
-/* Custom dark header */
-.custom-header {
-    background-color: #111;
-    color: white;
-    padding: 1rem 2rem;
-    font-size: 18px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-.custom-header a {
-    color: white;
-    text-decoration: none;
-    margin-left: 1.5rem;
-    font-weight: bold;
-}
-.custom-header a:hover {
-    text-decoration: underline;
-}
-
-/* Custom footer */
-.custom-footer {
-    text-align: center;
-    font-size: 14px;
-    margin-top: 50px;
-    padding: 20px;
-    color: #aaa;
-}
-</style>
+    /* Custom footer */
+    .custom-footer {
+        text-align: center;
+        font-size: 14px;
+        margin-top: 50px;
+        padding: 20px;
+        color: #aaa;
+    }
+    </style>
 
     <div class="custom-header">
         <div>🍽️ AI Restaurant Recommender</div>
-        <div>
-            <a href="#recommend">Recommend</a>
-            <a href="#deeplearning">Deep Learning</a>
-            <a href="#about">About</a>
+        <div class="nav-links">
+            <a href="#">Recommend</a>
+            <a href="#">Deep Learning</a>
+            <a href="#">About</a>
         </div>
     </div>
 """, unsafe_allow_html=True)
 
+# App introduction
 st.title("🍽️ AI Restaurant Recommender")
 st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-# Session state init
+# Session state
 if "results" not in st.session_state:
     st.session_state.results = None
     st.session_state.df = None
@@ -78,8 +76,10 @@ with st.container():
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
+# API key
 api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
+# Search action
 if st.button("🔍 Search") and food and location and api_key:
     st.session_state.results = None
     st.session_state.df = None
@@ -109,7 +109,7 @@ if st.button("🔍 Search") and food and location and api_key:
                 name = r['name']
                 address = r['location'].get('formatted_address', 'Unknown')
 
-                # Tips
+                # Fetch reviews
                 tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                 tips_res = requests.get(tips_url, headers=headers)
                 tips = tips_res.json()
@@ -121,7 +121,7 @@ if st.button("🔍 Search") and food and location and api_key:
                     stars = int(result["label"].split()[0])
                     sentiments.append(stars)
 
-                # Image
+                # Fetch photo
                 photo_url = ""
                 photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                 photo_res = requests.get(photo_api, headers=headers)
@@ -130,28 +130,19 @@ if st.button("🔍 Search") and food and location and api_key:
                     photo = photos[0]
                     photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
-                if sentiments:
-                    avg_rating = round(sum(sentiments) / len(sentiments), 2)
-                    results.append({
-                        "Restaurant": name,
-                        "Address": address,
-                        "Rating": avg_rating,
-                        "Stars": "⭐" * int(round(avg_rating)),
-                        "Reviews": len(sentiments),
-                        "Image": photo_url,
-                        "Tips": review_texts if review_texts else []
-                    })
-                else:
-                    results.append({
-                        "Restaurant": name,
-                        "Address": address,
-                        "Rating": 0,
-                        "Stars": "",
-                        "Reviews": 0,
-                        "Image": photo_url,
-                        "Tips": []
-                    })
+                # Append result
+                avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+                results.append({
+                    "Restaurant": name,
+                    "Address": address,
+                    "Rating": avg_rating,
+                    "Stars": "⭐" * int(round(avg_rating)),
+                    "Reviews": len(sentiments),
+                    "Image": photo_url,
+                    "Tips": review_texts[:2]
+                })
 
+            # Save results
             if results:
                 df = pd.DataFrame([
                     {
@@ -169,16 +160,18 @@ if st.button("🔍 Search") and food and location and api_key:
             else:
                 st.warning("Found restaurants, but no reviews available.")
 
-# Results
+# Display results
 if st.session_state.results:
     st.divider()
     st.subheader("📊 Restaurant Table")
     st.dataframe(st.session_state.df, use_container_width=True)
 
+    # Top 3 picks
     top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
     st.divider()
     st.subheader("🏅 Top 3 Picks")
+
     cols = st.columns(3)
     medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
     colors = ["#FFD700", "#C0C0C0", "#CD7F32"]
@@ -187,25 +180,18 @@ if st.session_state.results:
         if i < len(top3):
             r = top3[i]
             with col:
-                st.markdown(
-                    f"""
-                    <div style="background-color: {color}; border-radius: 15px; padding: 20px;
-                                text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black;
-                                font-weight: bold;">
+                st.markdown(f"""
+                    <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
                         <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
                         <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
                         <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-        else:
-            with col:
-                st.write("")
+                """, unsafe_allow_html=True)
 
     top = max(st.session_state.results, key=lambda x: x["Rating"])
     st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
+    # Images and reviews
     st.divider()
     st.subheader("📸 Restaurant Highlights")
 
@@ -217,19 +203,15 @@ if st.session_state.results:
             st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
 
             if r["Image"]:
-                st.markdown(
-                    f"""
+                st.markdown(f"""
                     <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
                         <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
                     </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                """, unsafe_allow_html=True)
 
-            tips = r.get("Tips", [])[:2]
-            if tips:
+            if r["Tips"]:
                 st.markdown("💬 **Reviews:**")
-                for tip in tips:
+                for tip in r["Tips"]:
                     st.markdown(f"• _{tip}_")
 
             st.markdown("---")
@@ -237,6 +219,6 @@ if st.session_state.results:
 # Footer
 st.markdown("""
     <div class="custom-footer">
-        Built with ❤️ using Streamlit, Foursquare API, and HuggingFace Transformers.
+        © 2025 AI Restaurant Recommender · Built with 🤖 + 🍴
     </div>
 """, unsafe_allow_html=True)
