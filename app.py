@@ -6,33 +6,14 @@ from transformers import pipeline
 # Set page configuration — must be FIRST
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Inject custom CSS to hide default Streamlit UI and style sidebar/footer
+# Hide Streamlit default UI and style footer
 st.markdown("""
     <style>
-    /* Hide Streamlit default UI */
+    /* Hide default Streamlit UI */
     #MainMenu, footer, header {visibility: hidden;}
     .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
         display: none !important;
     }
-
-    /* Sidebar styling */
-    .css-1d391kg {  /* class for the sidebar */
-        background-color: #111 !important;
-        color: white !important;
-    }
-    .css-1d391kg a {
-        color: white !important;
-        text-decoration: none;
-        font-weight: bold;
-        display: block;
-        margin: 1rem 0;
-        font-size: 18px;
-    }
-    .css-1d391kg a:hover {
-        text-decoration: underline;
-    }
-
-    /* Custom footer */
     .custom-footer {
         text-align: center;
         font-size: 14px;
@@ -43,19 +24,27 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Sidebar navigation menu
-menu = st.sidebar.radio(
-    "Navigation",
-    options=["Recommend", "Deep Learning", "About"],
-    index=0,
-)
+# Initialize the selected page in session_state
+if "page" not in st.session_state:
+    st.session_state.page = "Recommend"
 
-# --- Recommend Page ---
-if menu == "Recommend":
+# Sidebar menu buttons (no radio)
+with st.sidebar:
+    st.markdown("## 🍽️ Menu")
+
+    if st.button("Recommend"):
+        st.session_state.page = "Recommend"
+    if st.button("Deep Learning"):
+        st.session_state.page = "Deep Learning"
+    if st.button("About"):
+        st.session_state.page = "About"
+
+# -------- PAGE: Recommend --------
+if st.session_state.page == "Recommend":
     st.title("🍽️ AI Restaurant Recommender")
     st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-    # Session state
+    # Session state for results
     if "results" not in st.session_state:
         st.session_state.results = None
         st.session_state.df = None
@@ -71,7 +60,7 @@ if menu == "Recommend":
         with col1:
             location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-    # API key
+    # API key from secrets
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
     # Search action
@@ -211,53 +200,47 @@ if menu == "Recommend":
 
                 st.markdown("---")
 
-# --- Deep Learning Page ---
-elif menu == "Deep Learning":
-    st.title("🤖 Deep Learning in Restaurant Recommendation")
+# -------- PAGE: Deep Learning --------
+elif st.session_state.page == "Deep Learning":
+    st.title("🤖 Deep Learning Explained")
     st.markdown("""
-    ### How AI Sentiment Analysis Works
+    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews and provide AI-driven recommendations.
 
-    Our app leverages state-of-the-art deep learning models to analyze user reviews and predict sentiment ratings.
+    ### How it works:
+    - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
+    - Retrieves recent user reviews ("tips") for each restaurant.
+    - Uses a pretrained **BERT sentiment analysis model** (`nlptown/bert-base-multilingual-uncased-sentiment`) to analyze each review.
+    - Aggregates the sentiment scores into an average rating per restaurant.
+    - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
+    
+    ### About the AI model:
+    - The model classifies reviews into 1-5 star sentiment labels.
+    - It's multilingual and robust for various languages.
+    - Sentiment analysis is performed on review snippets capped at 512 tokens.
 
-    - We use a **BERT-based multilingual sentiment classifier** (`nlptown/bert-base-multilingual-uncased-sentiment`) to understand the emotional tone of reviews.
-    - BERT (Bidirectional Encoder Representations from Transformers) is a transformer-based model pre-trained on large corpora of text data.
-    - It reads each review and predicts a star rating from 1 to 5 based on the sentiment.
-    - By averaging ratings from multiple reviews, the app generates an accurate sentiment-based score for each restaurant.
-
-    This approach helps us provide recommendations beyond just numeric ratings by interpreting the actual opinions of users.
-
-    ### Benefits of Deep Learning in Our App:
-    - Understands nuanced language in multiple languages.
-    - Adapts to varying review lengths and styles.
-    - Provides more human-like understanding than simple keyword matching.
-
-    ### Learn more:
-    - [BERT Paper (2018)](https://arxiv.org/abs/1810.04805)
-    - [nlptown/bert-base-multilingual-uncased-sentiment model](https://huggingface.co/nlptown/bert-base-multilingual-uncased-sentiment)
+    This allows the app to recommend restaurants not just by popularity but by real user experience and sentiment.
     """)
 
-# --- About Page ---
-else:
-    st.title("ℹ️ About AI Restaurant Recommender")
+# -------- PAGE: About --------
+elif st.session_state.page == "About":
+    st.title("ℹ️ About This App")
     st.markdown("""
-    **AI Restaurant Recommender** is a demo app built to showcase how AI and location data can combine to provide personalized restaurant suggestions.
+    **AI Restaurant Recommender** was built to help you discover great places to eat by combining:
+    - Real user reviews,
+    - AI sentiment analysis,
+    - And Foursquare's extensive location data.
 
-    - Developed using **Streamlit** for an easy-to-use web app interface.
-    - Uses the **Foursquare Places API** to get restaurant information and reviews.
-    - Employs **transformers** deep learning models for sentiment analysis.
-    - Designed and built by a passionate developer who loves food and AI!
-
-    #### Contact
-    - Email: your.email@example.com
-    - GitHub: [github.com/yourprofile](https://github.com/yourprofile)
-    - LinkedIn: [linkedin.com/in/yourprofile](https://linkedin.com/in/yourprofile)
+    **Created by:** Your Name  
+    **Contact:** your.email@example.com  
+    **GitHub:** [github.com/yourprofile](https://github.com/yourprofile)  
+    **LinkedIn:** [linkedin.com/in/yourprofile](https://linkedin.com/in/yourprofile)
 
     Thanks for trying out the app! 🍽️
     """)
 
-# Custom footer
+# Footer (always displayed)
 st.markdown("""
-<footer class="custom-footer">
-    &copy; 2025 AI Restaurant Recommender Final Project using Fourquare API and Deep Learning
-</footer>
+    <div class="custom-footer">
+        © 2025 AI Restaurant Recommender · Built with 🤖 + 🍴
+    </div>
 """, unsafe_allow_html=True)
