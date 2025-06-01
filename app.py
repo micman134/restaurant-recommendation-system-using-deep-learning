@@ -6,7 +6,7 @@ from transformers import pipeline
 # Set page config at the top
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Custom CSS for sticky header, responsive nav, and hidden Streamlit icons
+# Custom CSS for hiding default Streamlit menu/icons and adding a sticky left sidebar
 st.markdown("""
     <style>
     /* Hide default Streamlit menu and icons */
@@ -15,88 +15,90 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Sticky dark header */
-    .custom-header {
-        position: sticky;
+    /* Left sidebar style */
+    .sidebar-content {
+        position: fixed;
         top: 0;
-        z-index: 999;
+        left: 0;
+        width: 250px;
+        height: 100vh;
         background-color: #111;
         color: white;
-        padding: 1rem 2rem;
+        padding: 2rem 1rem;
         font-size: 18px;
         display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-wrap: wrap;
+        flex-direction: column;
+        justify-content: flex-start;
+        z-index: 1000;
+        overflow-y: auto;
     }
 
-    .custom-header .brand {
+    .sidebar-content .brand {
         display: flex;
         align-items: center;
-        font-size: 20px;
+        font-size: 22px;
         font-weight: bold;
+        margin-bottom: 2rem;
     }
 
-    .custom-header .brand img {
-        height: 32px;
-        width: 32px;
+    .sidebar-content .brand img {
+        height: 40px;
+        width: 40px;
         margin-right: 10px;
         border-radius: 50%;
     }
 
-    .custom-header .nav-links {
-        display: flex;
-        flex-wrap: wrap;
-        margin-top: 10px;
-    }
-
-    .custom-header .nav-links a {
+    .sidebar-content a {
         color: white;
         text-decoration: none;
-        margin-left: 2rem;
+        margin-bottom: 1rem;
         font-weight: bold;
+        cursor: pointer;
     }
 
-    .custom-header .nav-links a:hover {
+    .sidebar-content a:hover {
         text-decoration: underline;
     }
 
-    /* Mobile nav */
-    @media screen and (max-width: 768px) {
-        .custom-header {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        .custom-header .nav-links {
-            margin-top: 10px;
-            flex-direction: column;
-        }
-        .custom-header .nav-links a {
-            margin: 0.5rem 0;
-        }
+    /* Push main content right to avoid sidebar overlap */
+    .main-content {
+        margin-left: 270px;
+        padding: 1rem 2rem;
     }
 
-    .custom-footer {
-        text-align: center;
-        font-size: 14px;
-        margin-top: 50px;
-        padding: 20px;
-        color: #aaa;
+    /* Responsive: sidebar fixed on wider screens, collapses on mobile */
+    @media screen and (max-width: 768px) {
+        .sidebar-content {
+            position: relative;
+            width: 100%;
+            height: auto;
+            flex-direction: row;
+            padding: 1rem;
+            justify-content: space-around;
+        }
+        .sidebar-content .brand {
+            margin-bottom: 0;
+        }
+        .main-content {
+            margin-left: 0;
+            padding: 1rem;
+        }
     }
     </style>
 
-    <div class="custom-header">
+    <div class="sidebar-content">
         <div class="brand">
             <img src="https://cdn-icons-png.flaticon.com/512/3075/3075977.png" />
             🍽️ AI Restaurant Recommender
         </div>
-        <div class="nav-links">
-            <a href="#">Recommend</a>
-            <a href="#">Deep Learning</a>
-            <a href="#">About</a>
-        </div>
+        <a href="#">Recommend</a>
+        <a href="#">Deep Learning</a>
+        <a href="#">About</a>
     </div>
 """, unsafe_allow_html=True)
+
+# Wrap the whole app content inside a div with margin-left so it won't be hidden behind sidebar
+st.markdown('<div class="main-content">', unsafe_allow_html=True)
 
 # App description
 st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
@@ -259,7 +261,9 @@ if st.session_state.results:
 
 # Footer
 st.markdown("""
-    <div class="custom-footer">
+    <div class="custom-footer" style="margin-left:270px; color:#aaa; padding: 20px 0; text-align: center;">
         Built with ❤️ using Streamlit, Foursquare, and HuggingFace
     </div>
 """, unsafe_allow_html=True)
+
+st.markdown('</div>', unsafe_allow_html=True)  # close main-content div
