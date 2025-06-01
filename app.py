@@ -6,7 +6,7 @@ from transformers import pipeline
 # Set page configuration — must be FIRST
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Inject custom CSS to remove default icons and add header/footer
+# Inject custom CSS to hide default Streamlit UI and style sidebar/footer
 st.markdown("""
     <style>
     /* Hide Streamlit default UI */
@@ -15,24 +15,20 @@ st.markdown("""
         display: none !important;
     }
 
-    /* Custom dark header */
-    .custom-header {
-        background-color: #111;
-        color: white;
-        padding: 1rem 2rem;
-        font-size: 18px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 20px;
+    /* Sidebar styling */
+    .css-1d391kg {  /* class for the sidebar */
+        background-color: #111 !important;
+        color: white !important;
     }
-    .custom-header .nav-links a {
-        color: white;
+    .css-1d391kg a {
+        color: white !important;
         text-decoration: none;
-        margin-left: 2rem;
         font-weight: bold;
+        display: block;
+        margin: 1rem 0;
+        font-size: 18px;
     }
-    .custom-header .nav-links a:hover {
+    .css-1d391kg a:hover {
         text-decoration: underline;
     }
 
@@ -45,16 +41,16 @@ st.markdown("""
         color: #aaa;
     }
     </style>
-
-    <div class="custom-header">
-        <div>🍽️ AI Restaurant Recommender</div>
-        <div class="nav-links">
-            <a href="#">Recommend</a>
-            <a href="#">Deep Learning</a>
-            <a href="#">About</a>
-        </div>
-    </div>
 """, unsafe_allow_html=True)
+
+# Sidebar navigation (using markdown links)
+st.sidebar.markdown("""
+# 🍽️ AI Restaurant Recommender
+---
+[Recommend](#)
+[Deep Learning](#)
+[About](#)
+""")
 
 # App introduction
 st.title("🍽️ AI Restaurant Recommender")
