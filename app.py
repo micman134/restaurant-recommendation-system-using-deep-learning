@@ -215,6 +215,6 @@ if st.session_state.results:
 # Footer
 st.markdown("""
     <div class="custom-footer">
-        © 2025 AI Restaurant Recommender · Built with 🤖 + 🍴
+        © 2025 AI (Deep Learning) Restaurant Recommender final project·
     </div>
 """, unsafe_allow_html=True)
