@@ -35,6 +35,7 @@ hide_streamlit_style = """
 """
 
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
 # Custom header
 st.markdown("""
