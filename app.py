@@ -149,7 +149,7 @@ if st.session_state.page == "Recommend":
     # Display results
     if st.session_state.results:
         st.divider()
-        st.subheader("📊 Restaurant Table")
+        st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
         # Top 3 picks
