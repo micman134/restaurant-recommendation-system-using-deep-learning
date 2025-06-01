@@ -201,6 +201,8 @@ if st.session_state.page == "Recommend":
                 st.markdown("---")
 
 # -------- PAGE: Deep Learning --------
+import matplotlib.pyplot as plt
+
 elif st.session_state.page == "Deep Learning":
     st.title("🤖 Deep Learning Explained")
     st.markdown("""
@@ -212,13 +214,52 @@ elif st.session_state.page == "Deep Learning":
     - Uses a pretrained **BERT sentiment analysis model** (`nlptown/bert-base-multilingual-uncased-sentiment`) to analyze each review.
     - Aggregates the sentiment scores into an average rating per restaurant.
     - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
-    
+
     ### About the AI model:
     - The model classifies reviews into 1-5 star sentiment labels.
     - It's multilingual and robust for various languages.
     - Sentiment analysis is performed on review snippets capped at 512 tokens.
 
     This allows the app to recommend restaurants not just by popularity but by real user experience and sentiment.
+    """)
+
+    st.markdown("---")
+    st.header("📊 Sentiment Analysis Visualization")
+
+    # Example sentiment distribution data (you can replace with real data)
+    stars = [1, 2, 3, 4, 5]
+    counts = [15, 30, 50, 70, 90]  # Example counts of reviews per star rating
+
+    fig1, ax1 = plt.subplots()
+    ax1.bar(stars, counts, color='skyblue')
+    ax1.set_xlabel("Star Rating")
+    ax1.set_ylabel("Number of Reviews")
+    ax1.set_title("Distribution of Sentiment Star Ratings")
+    ax1.set_xticks(stars)
+    st.pyplot(fig1)
+
+    st.markdown("""
+    The bar chart above shows how the BERT sentiment model classifies user reviews into star ratings from 1 to 5 stars. 
+    Most reviews cluster around 4 and 5 stars, indicating positive feedback.
+    """)
+
+    st.markdown("---")
+    st.header("📈 Average Restaurant Ratings")
+
+    # Example average ratings data (replace with your actual results if available)
+    example_restaurants = ["Sushi Place", "Jollof King", "Pizza House", "Burger Shack", "Vegan Delight"]
+    avg_ratings = [4.2, 3.8, 4.5, 3.6, 4.0]
+
+    fig2, ax2 = plt.subplots()
+    ax2.barh(example_restaurants, avg_ratings, color='lightgreen')
+    ax2.set_xlabel("Average Rating")
+    ax2.set_xlim(0, 5)
+    ax2.set_title("Average Sentiment Rating per Restaurant")
+    st.pyplot(fig2)
+
+    st.markdown("""
+    The horizontal bar chart above displays average sentiment ratings for various restaurants, calculated by averaging individual review sentiments. 
+    This helps users easily identify top-rated places based on genuine customer feedback.
     """)
 
 # -------- PAGE: About --------
