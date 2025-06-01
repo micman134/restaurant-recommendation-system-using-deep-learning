@@ -154,7 +154,7 @@ if st.session_state.page == "Recommend":
         top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
         st.divider()
-        st.subheader("🏅 Top 3 Picks")
+        st.subheader("🏅 AI Top Picks")
 
         cols = st.columns(3)
         medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
@@ -171,7 +171,7 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                         </div>
                     """, unsafe_allow_html=True)
-
+        st.divider()
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
