@@ -8,39 +8,47 @@ st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
 # Custom Header and Style
 st.markdown("""
-    <style>
-    /* Hide Streamlit default icons */
-    #MainMenu, footer {visibility: hidden;}
+   <style>
+/* Hide Streamlit default icons */
+#MainMenu, footer, header {visibility: hidden;}
 
-    /* Custom dark header */
-    .custom-header {
-        background-color: #111;
-        color: white;
-        padding: 1rem 2rem;
-        font-size: 18px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    .custom-header a {
-        color: white;
-        text-decoration: none;
-        margin-left: 1.5rem;
-        font-weight: bold;
-    }
-    .custom-header a:hover {
-        text-decoration: underline;
-    }
+/* Also hide the top-right floating toolbar (share, star, GitHub) */
+.stDeployButton,
+.st-emotion-cache-13ln4jf,  /* deployment status */
+button[kind="icon"] {
+    display: none !important;
+}
 
-    /* Custom footer */
-    .custom-footer {
-        text-align: center;
-        font-size: 14px;
-        margin-top: 50px;
-        padding: 20px;
-        color: #aaa;
-    }
-    </style>
+/* Custom dark header */
+.custom-header {
+    background-color: #111;
+    color: white;
+    padding: 1rem 2rem;
+    font-size: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.custom-header a {
+    color: white;
+    text-decoration: none;
+    margin-left: 1.5rem;
+    font-weight: bold;
+}
+.custom-header a:hover {
+    text-decoration: underline;
+}
+
+/* Custom footer */
+.custom-footer {
+    text-align: center;
+    font-size: 14px;
+    margin-top: 50px;
+    padding: 20px;
+    color: #aaa;
+}
+</style>
+
     <div class="custom-header">
         <div>🍽️ AI Restaurant Recommender</div>
         <div>
