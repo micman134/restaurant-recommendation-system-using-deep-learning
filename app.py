@@ -4,13 +4,12 @@ import pandas as pd
 from transformers import pipeline
 import matplotlib.pyplot as plt
 
-# Set page configuration — must be FIRST
+# Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
 # Hide Streamlit default UI and style footer
 st.markdown("""
     <style>
-    /* Hide default Streamlit UI */
     #MainMenu, footer, header {visibility: hidden;}
     .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
         display: none !important;
@@ -29,10 +28,9 @@ st.markdown("""
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
 
-# Sidebar menu buttons (no radio)
+# Sidebar menu
 with st.sidebar:
     st.markdown("## 🍽️ Menu")
-
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
@@ -45,12 +43,10 @@ if st.session_state.page == "Recommend":
     st.title("🍽️ AI Restaurant Recommender")
     st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-    # Session state for results
     if "results" not in st.session_state:
         st.session_state.results = None
         st.session_state.df = None
 
-    # Inputs
     with st.container():
         col1, _ = st.columns([1, 1])
         with col1:
@@ -61,98 +57,87 @@ if st.session_state.page == "Recommend":
         with col1:
             location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-    # API key from secrets
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-    # Search action
-    if st.button("🔍 Search") and food and location and api_key:
-        st.session_state.results = None
-        st.session_state.df = None
+    if st.button("🔍 Search"):
+        if not food and not location:
+            st.warning("\u26a0\ufe0f Please enter both a food type and location.")
+        elif not food:
+            st.warning("\u26a0\ufe0f Please enter a food type.")
+        elif not location:
+            st.warning("\u26a0\ufe0f Please enter a location.")
+        elif not api_key:
+            st.error("\u274c Foursquare API key is missing.")
+        else:
+            st.session_state.results = None
+            st.session_state.df = None
 
-        with st.spinner("Searching and analyzing reviews..."):
-            headers = {
-                "accept": "application/json",
-                "Authorization": api_key
-            }
-            params = {
-                "query": food,
-                "near": location,
-                "limit": 10
-            }
+            with st.spinner("Searching and analyzing reviews..."):
+                headers = {"accept": "application/json", "Authorization": api_key}
+                params = {"query": food, "near": location, "limit": 10}
+                res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
+                restaurants = res.json().get("results", [])
 
-            res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
-            restaurants = res.json().get("results", [])
-           
+                if not restaurants:
+                    st.error("\u274c No restaurants found. Try different search terms.")
+                else:
+                    classifier = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
+                    results = []
 
-            if not restaurants:
-                st.error("❌ No restaurants found. Try different search terms.")
-            else:
-                classifier = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
-                results = []
+                    for r in restaurants:
+                        fsq_id = r['fsq_id']
+                        name = r['name']
+                        address = r['location'].get('formatted_address', 'Unknown')
 
-                for r in restaurants:
-                    fsq_id = r['fsq_id']
-                    name = r['name']
-                    address = r['location'].get('formatted_address', 'Unknown')
+                        tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
+                        tips_res = requests.get(tips_url, headers=headers)
+                        tips = tips_res.json()
+                        review_texts = [tip["text"] for tip in tips[:5]] if tips else []
 
-                    # Fetch reviews
-                    tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
-                    tips_res = requests.get(tips_url, headers=headers)
-                    tips = tips_res.json()
-                    review_texts = [tip["text"] for tip in tips[:5]] if tips else []
+                        sentiments = []
+                        for tip in review_texts:
+                            result = classifier(tip[:512])[0]
+                            stars = int(result["label"].split()[0])
+                            sentiments.append(stars)
 
-                    sentiments = []
-                    for tip in review_texts:
-                        result = classifier(tip[:512])[0]
-                        stars = int(result["label"].split()[0])
-                        sentiments.append(stars)
+                        photo_url = ""
+                        photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
+                        photo_res = requests.get(photo_api, headers=headers)
+                        photos = photo_res.json()
+                        if photos:
+                            photo = photos[0]
+                            photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
-                    # Fetch photo
-                    photo_url = ""
-                    photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
-                    photo_res = requests.get(photo_api, headers=headers)
-                    photos = photo_res.json()
-                    if photos:
-                        photo = photos[0]
-                        photo_url = f"{photo['prefix']}original{photo['suffix']}"
+                        avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+                        results.append({
+                            "Restaurant": name,
+                            "Address": address,
+                            "Rating": avg_rating,
+                            "Stars": "⭐" * int(round(avg_rating)),
+                            "Reviews": len(sentiments),
+                            "Image": photo_url,
+                            "Tips": review_texts[:2]
+                        })
 
-                    # Append result
-                    avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
-                    results.append({
-                        "Restaurant": name,
-                        "Address": address,
-                        "Rating": avg_rating,
-                        "Stars": "⭐" * int(round(avg_rating)),
-                        "Reviews": len(sentiments),
-                        "Image": photo_url,
-                        "Tips": review_texts[:2]
-                    })
-
-                # Save results
-                if results:
-                    df = pd.DataFrame([
-                        {
+                    if results:
+                        df = pd.DataFrame([{
                             "Restaurant": r["Restaurant"],
                             "Address": r["Address"],
                             "Average Rating": r["Rating"],
                             "Stars": r["Stars"],
                             "Reviews": r["Reviews"]
-                        }
-                        for r in results
-                    ])
-                    df.index = df.index + 1
-                    st.session_state.results = results
-                    st.session_state.df = df
-                else:
-                    st.warning("Found restaurants, but no reviews available.")
+                        } for r in results])
+                        df.index += 1
+                        st.session_state.results = results
+                        st.session_state.df = df
+                    else:
+                        st.warning("Found restaurants, but no reviews available.")
 
-    # Display results
     if st.session_state.results:
         st.divider()
         st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
-        # Top 3 picks
         top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
 
         st.divider()
@@ -174,11 +159,11 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                         </div>
                     """, unsafe_allow_html=True)
+
         st.divider()
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
-        # Images and reviews
         st.divider()
         st.subheader("📸 Restaurant Highlights")
 
@@ -188,19 +173,16 @@ if st.session_state.page == "Recommend":
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
-
                 if r["Image"]:
                     st.markdown(f"""
                         <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
                             <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
                         </div>
                     """, unsafe_allow_html=True)
-
                 if r["Tips"]:
                     st.markdown("💬 **Reviews:**")
                     for tip in r["Tips"]:
                         st.markdown(f"• _{tip}_")
-
                 st.markdown("---")
 
 # -------- PAGE: Deep Learning --------
@@ -215,17 +197,8 @@ elif st.session_state.page == "Deep Learning":
     - Uses a pretrained **BERT sentiment analysis model** (`nlptown/bert-base-multilingual-uncased-sentiment`) to analyze each review.
     - Aggregates the sentiment scores into an average rating per restaurant.
     - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
-
-    ### About the AI model:
-    - The model classifies reviews into 1-5 star sentiment labels.
-    - It's multilingual and robust for various languages.
-    - Sentiment analysis is performed on review snippets capped at 512 tokens.
-
-    This allows the app to recommend restaurants not just by popularity but by real user experience and sentiment.
     """)
 
-    st.markdown("---")
-   
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
@@ -238,7 +211,7 @@ elif st.session_state.page == "About":
     Thanks for trying out the app! 🍽️
     """)
 
-# Footer (always displayed)
+# Footer
 st.markdown("""
     <div class="custom-footer">
         © 2025 AI (Deep Learning) Restaurant Recommender Final Year Project·
