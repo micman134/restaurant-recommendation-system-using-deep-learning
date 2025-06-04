@@ -81,6 +81,7 @@ if st.session_state.page == "Recommend":
                     name = r['name']
                     address = r['location'].get('formatted_address', 'Unknown')
 
+                    # Fetch reviews
                     tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                     tips_res = requests.get(tips_url, headers=headers)
                     tips = tips_res.json()
@@ -92,6 +93,7 @@ if st.session_state.page == "Recommend":
                         stars = int(result["label"].split()[0])
                         sentiments.append(stars)
 
+                    # Fetch photo
                     photo_url = ""
                     photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                     photo_res = requests.get(photo_api, headers=headers)
@@ -100,6 +102,7 @@ if st.session_state.page == "Recommend":
                         photo = photos[0]
                         photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
+                    # Append result
                     avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
                     results.append({
                         "Restaurant": name,
@@ -156,11 +159,10 @@ if st.session_state.page == "Recommend":
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
+        # Store top pick to history
         if "history" not in st.session_state:
             st.session_state.history = []
-
         top_pick = {
-            "Food Type": food,
             "Restaurant": top["Restaurant"],
             "Rating": top["Rating"],
             "Address": top["Address"]
@@ -170,6 +172,7 @@ if st.session_state.page == "Recommend":
 
         st.divider()
         st.subheader("📸 Restaurant Highlights")
+
         cols = st.columns(2)
         for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
             with cols[idx % 2]:
@@ -191,15 +194,17 @@ if st.session_state.page == "Recommend":
 # -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
     st.title("🤖 Deep Learning Explained")
-    st.markdown("This section will explain how BERT-based sentiment analysis works behind the scenes...")
+    st.markdown("...")
+
 
 # -------- PAGE: Dietary & History --------
 elif st.session_state.page == "Dietary":
     st.title("🥗 History Review")
-    st.markdown("Use this section to review your **top restaurant picks** and their food types from past recommendations.")
+    st.markdown("Use this section to manage  review your **top restaurant picks** from past recommendations.")
+
+   
     st.markdown("---")
     st.subheader("🕒 Review History (Top Picks)")
-
     if "history" in st.session_state and st.session_state.history:
         hist_df = pd.DataFrame(st.session_state.history)
         hist_df.index += 1
@@ -211,12 +216,12 @@ elif st.session_state.page == "Dietary":
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
-    **AI Restaurant Recommender** helps you discover great places to eat by combining:
+    **AI Restaurant Recommender** was built to help you discover great places to eat by combining:
     - Real user reviews,
-    - AI-powered sentiment analysis,
-    - And Foursquare's vast location data.
+    - AI sentiment analysis,
+    - And Foursquare's extensive location data.
 
-    Built with ❤️ using Python, Transformers, and Streamlit.
+    Thanks for trying out the app! 🍽️
     """)
 
 # Footer
