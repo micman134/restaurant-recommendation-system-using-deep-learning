@@ -4,12 +4,13 @@ import pandas as pd
 from transformers import pipeline
 import matplotlib.pyplot as plt
 
-# Set page configuration
+# Set page configuration — must be FIRST
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Hide Streamlit UI
+# Hide Streamlit default UI and style footer
 st.markdown("""
     <style>
+    /* Hide default Streamlit UI */
     #MainMenu, footer, header {visibility: hidden;}
     .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
         display: none !important;
@@ -24,19 +25,18 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
+# Initialize the selected page in session_state
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
 
-# Sidebar
+# Sidebar menu buttons (no radio)
 with st.sidebar:
     st.markdown("## 🍽️ Menu")
+
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
         st.session_state.page = "Deep Learning"
-    if st.button("Dietary & History"):
-        st.session_state.page = "Dietary"
     if st.button("About"):
         st.session_state.page = "About"
 
@@ -45,30 +45,44 @@ if st.session_state.page == "Recommend":
     st.title("🍽️ AI Restaurant Recommender")
     st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
+    # Session state for results
     if "results" not in st.session_state:
         st.session_state.results = None
         st.session_state.df = None
 
+    # Inputs
     with st.container():
         col1, _ = st.columns([1, 1])
         with col1:
             food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
+
     with st.container():
         col1, _ = st.columns([1, 1])
         with col1:
             location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
+    # API key from secrets
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
+    # Search action
     if st.button("🔍 Search") and food and location and api_key:
         st.session_state.results = None
         st.session_state.df = None
 
         with st.spinner("Searching and analyzing reviews..."):
-            headers = {"accept": "application/json", "Authorization": api_key}
-            params = {"query": food, "near": location, "limit": 10}
+            headers = {
+                "accept": "application/json",
+                "Authorization": api_key
+            }
+            params = {
+                "query": food,
+                "near": location,
+                "limit": 10
+            }
+
             res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
             restaurants = res.json().get("results", [])
+           
 
             if not restaurants:
                 st.error("❌ No restaurants found. Try different search terms.")
@@ -114,26 +128,33 @@ if st.session_state.page == "Recommend":
                         "Tips": review_texts[:2]
                     })
 
+                # Save results
                 if results:
-                    df = pd.DataFrame([{
-                        "Restaurant": r["Restaurant"],
-                        "Address": r["Address"],
-                        "Average Rating": r["Rating"],
-                        "Stars": r["Stars"],
-                        "Reviews": r["Reviews"]
-                    } for r in results])
+                    df = pd.DataFrame([
+                        {
+                            "Restaurant": r["Restaurant"],
+                            "Address": r["Address"],
+                            "Average Rating": r["Rating"],
+                            "Stars": r["Stars"],
+                            "Reviews": r["Reviews"]
+                        }
+                        for r in results
+                    ])
                     df.index = df.index + 1
                     st.session_state.results = results
                     st.session_state.df = df
                 else:
                     st.warning("Found restaurants, but no reviews available.")
 
+    # Display results
     if st.session_state.results:
         st.divider()
         st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
+        # Top 3 picks
         top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
+
         st.divider()
         st.subheader("🏅 AI (Deep Learning) Top Picks")
 
@@ -154,22 +175,10 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
         st.divider()
-
-        # Top Pick and save to history
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
-        # Store top pick to history
-        if "history" not in st.session_state:
-            st.session_state.history = []
-        top_pick = {
-            "Restaurant": top["Restaurant"],
-            "Rating": top["Rating"],
-            "Address": top["Address"]
-        }
-        if top_pick not in st.session_state.history:
-            st.session_state.history.append(top_pick)
-
+        # Images and reviews
         st.divider()
         st.subheader("📸 Restaurant Highlights")
 
@@ -179,39 +188,44 @@ if st.session_state.page == "Recommend":
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+
                 if r["Image"]:
                     st.markdown(f"""
                         <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
                             <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
                         </div>
                     """, unsafe_allow_html=True)
+
                 if r["Tips"]:
                     st.markdown("💬 **Reviews:**")
                     for tip in r["Tips"]:
                         st.markdown(f"• _{tip}_")
+
                 st.markdown("---")
 
 # -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
     st.title("🤖 Deep Learning Explained")
-    st.markdown("...")
+    st.markdown("""
+    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews and provide AI-driven recommendations.
 
+    ### How it works:
+    - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
+    - Retrieves recent user reviews ("tips") for each restaurant.
+    - Uses a pretrained **BERT sentiment analysis model** (`nlptown/bert-base-multilingual-uncased-sentiment`) to analyze each review.
+    - Aggregates the sentiment scores into an average rating per restaurant.
+    - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
 
-# -------- PAGE: Dietary & History --------
-elif st.session_state.page == "Dietary":
-    st.title("🥗 History Review")
-    st.markdown("Use this section to manage  review your **top restaurant picks** from past recommendations.")
+    ### About the AI model:
+    - The model classifies reviews into 1-5 star sentiment labels.
+    - It's multilingual and robust for various languages.
+    - Sentiment analysis is performed on review snippets capped at 512 tokens.
 
-   
+    This allows the app to recommend restaurants not just by popularity but by real user experience and sentiment.
+    """)
+
     st.markdown("---")
-    st.subheader("🕒 Review History (Top Picks)")
-    if "history" in st.session_state and st.session_state.history:
-        hist_df = pd.DataFrame(st.session_state.history)
-        hist_df.index += 1
-        st.dataframe(hist_df, use_container_width=True)
-    else:
-        st.info("You haven't made any recommendations yet.")
-
+   
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
@@ -224,9 +238,9 @@ elif st.session_state.page == "About":
     Thanks for trying out the app! 🍽️
     """)
 
-# Footer
+# Footer (always displayed)
 st.markdown("""
     <div class="custom-footer">
-        © 2025 AI (Deep Learning) Restaurant Recommender Final Year Project ·
+        © 2025 AI (Deep Learning) Restaurant Recommender Final Year Project·
     </div>
 """, unsafe_allow_html=True)
