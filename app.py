@@ -24,6 +24,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Auto focus on first input (food)
+st.markdown("""
+    <script>
+    const foodInput = window.parent.document.querySelectorAll('input[type="text"]')[0];
+    if (foodInput) { foodInput.focus(); }
+    </script>
+""", unsafe_allow_html=True)
+
 # Initialize the selected page in session_state
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
@@ -50,12 +58,12 @@ if st.session_state.page == "Recommend":
     with st.container():
         col1, _ = st.columns([1, 1])
         with col1:
-            food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
+            food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza", help="Enter the kind of food you want to search for.")
 
     with st.container():
         col1, _ = st.columns([1, 1])
         with col1:
-            location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+            location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria", help="Enter the city or area where you're searching for food.")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
@@ -109,15 +117,18 @@ if st.session_state.page == "Recommend":
                             photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
                         avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
-                        results.append({
-                            "Restaurant": name,
-                            "Address": address,
-                            "Rating": avg_rating,
-                            "Stars": "⭐" * int(round(avg_rating)),
-                            "Reviews": len(sentiments),
-                            "Image": photo_url,
-                            "Tips": review_texts[:2]
-                        })
+
+                        # ✅ Only include restaurants with reviews
+                        if sentiments:
+                            results.append({
+                                "Restaurant": name,
+                                "Address": address,
+                                "Rating": avg_rating,
+                                "Stars": "⭐" * int(round(avg_rating)),
+                                "Reviews": len(sentiments),
+                                "Image": photo_url,
+                                "Tips": review_texts[:2]
+                            })
 
                     if results:
                         df = pd.DataFrame([{
