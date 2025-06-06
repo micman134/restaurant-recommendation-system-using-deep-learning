@@ -32,6 +32,11 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
+# ✅ Cache the sentiment analysis model
+@st.cache_resource(show_spinner=False)
+def get_classifier():
+    return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
+
 # Initialize the selected page in session_state
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
@@ -89,7 +94,7 @@ if st.session_state.page == "Recommend":
                 if not restaurants:
                     st.error("\u274c No restaurants found. Try different search terms.")
                 else:
-                    classifier = pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
+                    classifier = get_classifier()  # ✅ Load cached model
                     results = []
 
                     for r in restaurants:
@@ -118,8 +123,7 @@ if st.session_state.page == "Recommend":
 
                         avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
 
-                        # ✅ Only include restaurants with reviews
-                        if sentiments:
+                        if sentiments:  # ✅ Only include if reviews are available
                             results.append({
                                 "Restaurant": name,
                                 "Address": address,
