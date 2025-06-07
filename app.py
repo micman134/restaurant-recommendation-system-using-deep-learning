@@ -2,13 +2,10 @@ import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
-import matplotlib.pyplot as plt
-import io
-import base64
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Set page config
+# Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
 # Hide Streamlit UI and footer
@@ -28,7 +25,15 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Load sentiment classifier once
+# Autofocus on the food input field
+st.markdown("""
+    <script>
+    const foodInput = window.parent.document.querySelectorAll('input[type="text"]')[0];
+    if (foodInput) { foodInput.focus(); }
+    </script>
+""", unsafe_allow_html=True)
+
+# Load sentiment analysis model
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
@@ -47,28 +52,33 @@ def read_history():
     return sheet.get_all_records()
 
 def append_history(data_dict):
+    food = data_dict.get("Food", "").strip()
+    location = data_dict.get("Location", "").strip()
+
+    if not food or not location:
+        st.warning("Food or Location is empty, skipping save to history.")
+        return
+
     sheet = get_gsheet()
-    sheet.append_row(list(data_dict.values()))
+    existing_rows = sheet.get_all_records()
 
-# Function to create small bar chart as base64 PNG
-def create_sentiment_chart(positive, neutral, negative):
-    fig, ax = plt.subplots(figsize=(2, 1.2))
-    bars = ax.bar(['Positive', 'Neutral', 'Negative'], [positive, neutral, negative],
-                  color=['#4CAF50', '#FFC107', '#F44336'])
-    ax.set_ylim(0, 100)
-    ax.set_ylabel('%')
-    ax.set_title('Sentiments', fontsize=10)
-    ax.tick_params(axis='x', labelrotation=0, labelsize=8)
-    ax.tick_params(axis='y', labelsize=8)
-    ax.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.tight_layout()
+    # Check for duplicate entry
+    for row in existing_rows:
+        if (row.get("Restaurant") == data_dict.get("Restaurant") and
+            row.get("Food") == food and
+            row.get("Location") == location):
+            st.info("This recommendation is already saved in history. Skipping append.")
+            return
 
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', dpi=80)
-    plt.close(fig)
-    buf.seek(0)
-    img_base64 = base64.b64encode(buf.read()).decode()
-    return f"data:image/png;base64,{img_base64}"
+    row = [
+        data_dict.get("Restaurant", ""),
+        data_dict.get("Rating", ""),
+        data_dict.get("Address", ""),
+        food,
+        location
+    ]
+    sheet.append_row(row)
+    st.success("New recommendation saved to history!")
 
 # Session state initialization
 if "page" not in st.session_state:
@@ -131,38 +141,17 @@ if st.session_state.page == "Recommend":
                         name = r['name']
                         address = r['location'].get('formatted_address', 'Unknown')
 
-                        # Fetch tips/reviews
                         tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                         tips_res = requests.get(tips_url, headers=headers)
                         tips = tips_res.json()
                         review_texts = [tip["text"] for tip in tips[:5]] if tips else []
 
                         sentiments = []
-                        sentiment_counts = {"Positive": 0, "Neutral": 0, "Negative": 0}
                         for tip in review_texts:
                             result = classifier(tip[:512])[0]
                             stars = int(result["label"].split()[0])
                             sentiments.append(stars)
-                            # Categorize sentiment by star rating
-                            if stars >= 4:
-                                sentiment_counts["Positive"] += 1
-                            elif stars == 3:
-                                sentiment_counts["Neutral"] += 1
-                            else:
-                                sentiment_counts["Negative"] += 1
 
-                        total_reviews = len(sentiments)
-                        avg_rating = round(sum(sentiments) / total_reviews, 2) if total_reviews else 0
-
-                        # Calculate percentages
-                        if total_reviews > 0:
-                            positive_pct = round((sentiment_counts["Positive"] / total_reviews) * 100, 1)
-                            neutral_pct = round((sentiment_counts["Neutral"] / total_reviews) * 100, 1)
-                            negative_pct = round((sentiment_counts["Negative"] / total_reviews) * 100, 1)
-                        else:
-                            positive_pct = neutral_pct = negative_pct = 0
-
-                        # Fetch photo
                         photo_url = ""
                         photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                         photo_res = requests.get(photo_api, headers=headers)
@@ -171,18 +160,17 @@ if st.session_state.page == "Recommend":
                             photo = photos[0]
                             photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
+                        avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+
                         if sentiments:
                             results.append({
                                 "Restaurant": name,
                                 "Address": address,
                                 "Rating": avg_rating,
                                 "Stars": "⭐" * int(round(avg_rating)),
-                                "Reviews": total_reviews,
+                                "Reviews": len(sentiments),
                                 "Image": photo_url,
-                                "Tips": review_texts[:2],
-                                "Positive %": positive_pct,
-                                "Neutral %": neutral_pct,
-                                "Negative %": negative_pct
+                                "Tips": review_texts[:2]
                             })
 
                     if results:
@@ -216,56 +204,93 @@ if st.session_state.page == "Recommend":
             if i < len(top3):
                 r = top3[i]
                 with col:
-                    # Generate small sentiment chart
-                    chart_uri = create_sentiment_chart(r.get("Positive %", 0), r.get("Neutral %", 0), r.get("Negative %", 0))
-
                     st.markdown(f"""
-                        <div style="background-color: {color}; border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
+                        <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
                             <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
                             <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
                             <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
-                            <img src="{chart_uri}" style="margin-top: 10px; margin-bottom: 10px; width: 100%;">
-                            <div style="font-size: 14px; text-align: left;">
-                                <b>Reviews:</b> {r['Reviews']}<br>
-                                <b>Sample Tips:</b> <i>{'<br>'.join(r['Tips'])}</i>
-                            </div>
                         </div>
                     """, unsafe_allow_html=True)
 
-# -------- PAGE: History --------
-elif st.session_state.page == "History":
-    st.title("📜 Search History")
+        st.divider()
+        top = max(st.session_state.results, key=lambda x: x["Rating"])
+        st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
-    try:
-        records = read_history()
-        if not records:
-            st.info("No history found yet.")
-        else:
-            history_df = pd.DataFrame(records)
-            st.dataframe(history_df, use_container_width=True)
-    except Exception as e:
-        st.error(f"Error loading history: {e}")
+        top_pick = {
+            "Restaurant": top["Restaurant"],
+            "Rating": top["Rating"],
+            "Address": top["Address"],
+            "Food": food,
+            "Location": location
+        }
+        append_history(top_pick)
+
+        st.divider()
+        st.subheader("📸 Restaurant Highlights")
+
+        cols = st.columns(2)
+        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
+            with cols[idx % 2]:
+                st.markdown(f"### {r['Restaurant']}")
+                st.markdown(f"**📍 Address:** {r['Address']}")
+                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+                if r["Image"]:
+                    st.markdown(f"""
+                        <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
+                            <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
+                        </div>
+                    """, unsafe_allow_html=True)
+                if r["Tips"]:
+                    st.markdown("💬 **Reviews:**")
+                    for tip in r["Tips"]:
+                        st.markdown(f"• _{tip}_")
+                st.markdown("---")
 
 # -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
-    st.title("🤖 About AI & Sentiment Analysis")
+    st.title("🤖 Deep Learning Explained")
     st.markdown("""
-    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews fetched from **Foursquare** API.
-    
-    The classifier is a fine-tuned multilingual BERT model (nlptown/bert-base-multilingual-uncased-sentiment) that predicts star ratings (1 to 5).
-    
-    Sentiment scores are used to help rank restaurants based on positive, neutral, and negative review percentages.
+    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews and provide AI-driven recommendations.
+
+    ### How it works:
+    - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
+    - Retrieves recent user reviews ("tips") for each restaurant.
+    - Uses a pretrained **BERT sentiment analysis model** to analyze each review.
+    - Aggregates the sentiment scores into an average rating per restaurant.
+    - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
     """)
+
+# -------- PAGE: History --------
+elif st.session_state.page == "History":
+    st.title("📜 History of Top Picks")
+    st.markdown("This shows a list of all your top recommended restaurants saved to Google Sheets.")
+    try:
+        history = read_history()
+        if history:
+            df = pd.DataFrame(history)
+            df.index += 1
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No history found yet.")
+    except Exception as e:
+        st.error(f"⚠️ Error loading history: {e}")
 
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
-    - Developed using Streamlit, Foursquare API, and HuggingFace Transformers.
-    - Sentiment analysis uses a pretrained BERT model.
-    - Created by your assistant 💡
+    **AI Restaurant Recommender** was built to help you discover great places to eat by combining:
+    - Real user reviews,
+    - AI sentiment analysis,
+    - And Foursquare's extensive location data.
+
+    Thanks for trying out the app! 🍽️
     """)
 
 # Footer
-st.markdown('<div class="custom-footer">Made with ❤️ using Streamlit & Python</div>', unsafe_allow_html=True)
+st.markdown("""
+    <div class="custom-footer">
+        © 2025 AI (Deep Learning) Restaurant Recommender Final Year Project·
+    </div>
+""", unsafe_allow_html=True)
