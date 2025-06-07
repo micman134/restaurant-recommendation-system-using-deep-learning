@@ -6,3 +6,5 @@ torch==2.1.0
 sentencepiece==0.1.99
 geocoder
 matplotlib>=3.4.0
+gspread
+oauth2client
