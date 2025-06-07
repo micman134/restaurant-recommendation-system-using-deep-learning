@@ -298,7 +298,7 @@ elif st.session_state.page == "About":
     - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
     - Google Sheets to save and track your recommendation history.
 
-    Developed by YourName.
+    
 
     --- 
     _Powered by OpenAI and Streamlit._
