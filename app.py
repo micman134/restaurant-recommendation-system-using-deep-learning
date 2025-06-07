@@ -3,10 +3,12 @@ import requests
 import pandas as pd
 from transformers import pipeline
 import matplotlib.pyplot as plt
+import io
+import base64
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-# Set page configuration
+# Set page config
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
 # Hide Streamlit UI and footer
@@ -26,15 +28,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Autofocus on the food input field
-st.markdown("""
-    <script>
-    const foodInput = window.parent.document.querySelectorAll('input[type="text"]')[0];
-    if (foodInput) { foodInput.focus(); }
-    </script>
-""", unsafe_allow_html=True)
-
-# Load sentiment analysis model
+# Load sentiment classifier once
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
@@ -43,9 +37,7 @@ def get_classifier():
 @st.cache_resource
 def get_gsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
     creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-
     client = gspread.authorize(creds)
     sheet = client.open("Restaurant_Recommender_History").sheet1
     return sheet
@@ -55,17 +47,28 @@ def read_history():
     return sheet.get_all_records()
 
 def append_history(data_dict):
-    if not data_dict.get("Food") or not data_dict.get("Location"):
-        return
     sheet = get_gsheet()
-    records = sheet.get_all_records()
-    # Avoid duplicate entries by matching Restaurant + Food + Location
-    for rec in records:
-        if (rec.get("Restaurant") == data_dict.get("Restaurant") and
-            rec.get("Food") == data_dict.get("Food") and
-            rec.get("Location") == data_dict.get("Location")):
-            return  # duplicate found; do not append
     sheet.append_row(list(data_dict.values()))
+
+# Function to create small bar chart as base64 PNG
+def create_sentiment_chart(positive, neutral, negative):
+    fig, ax = plt.subplots(figsize=(2, 1.2))
+    bars = ax.bar(['Positive', 'Neutral', 'Negative'], [positive, neutral, negative],
+                  color=['#4CAF50', '#FFC107', '#F44336'])
+    ax.set_ylim(0, 100)
+    ax.set_ylabel('%')
+    ax.set_title('Sentiments', fontsize=10)
+    ax.tick_params(axis='x', labelrotation=0, labelsize=8)
+    ax.tick_params(axis='y', labelsize=8)
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', dpi=80)
+    plt.close(fig)
+    buf.seek(0)
+    img_base64 = base64.b64encode(buf.read()).decode()
+    return f"data:image/png;base64,{img_base64}"
 
 # Session state initialization
 if "page" not in st.session_state:
@@ -104,9 +107,9 @@ if st.session_state.page == "Recommend":
 
     if st.button("🔍 Search"):
         if not food or not location:
-            st.warning("\u26a0\ufe0f Please enter both a food type and location.")
+            st.warning("⚠️ Please enter both a food type and location.")
         elif not api_key:
-            st.error("\u274c Foursquare API key is missing.")
+            st.error("❌ Foursquare API key is missing.")
         else:
             st.session_state.results = None
             st.session_state.df = None
@@ -118,7 +121,7 @@ if st.session_state.page == "Recommend":
                 restaurants = res.json().get("results", [])
 
                 if not restaurants:
-                    st.error("\u274c No restaurants found. Try different search terms.")
+                    st.error("❌ No restaurants found. Try different search terms.")
                 else:
                     classifier = get_classifier()
                     results = []
@@ -128,30 +131,38 @@ if st.session_state.page == "Recommend":
                         name = r['name']
                         address = r['location'].get('formatted_address', 'Unknown')
 
+                        # Fetch tips/reviews
                         tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                         tips_res = requests.get(tips_url, headers=headers)
                         tips = tips_res.json()
                         review_texts = [tip["text"] for tip in tips[:5]] if tips else []
 
                         sentiments = []
-                        # Counters for sentiment breakdown
-                        positive_count = 0
-                        neutral_count = 0
-                        negative_count = 0
-
+                        sentiment_counts = {"Positive": 0, "Neutral": 0, "Negative": 0}
                         for tip in review_texts:
                             result = classifier(tip[:512])[0]
                             stars = int(result["label"].split()[0])
                             sentiments.append(stars)
-
-                            # Assume: 4-5 stars = positive, 3 = neutral, 1-2 = negative
+                            # Categorize sentiment by star rating
                             if stars >= 4:
-                                positive_count += 1
+                                sentiment_counts["Positive"] += 1
                             elif stars == 3:
-                                neutral_count += 1
+                                sentiment_counts["Neutral"] += 1
                             else:
-                                negative_count += 1
+                                sentiment_counts["Negative"] += 1
 
+                        total_reviews = len(sentiments)
+                        avg_rating = round(sum(sentiments) / total_reviews, 2) if total_reviews else 0
+
+                        # Calculate percentages
+                        if total_reviews > 0:
+                            positive_pct = round((sentiment_counts["Positive"] / total_reviews) * 100, 1)
+                            neutral_pct = round((sentiment_counts["Neutral"] / total_reviews) * 100, 1)
+                            negative_pct = round((sentiment_counts["Negative"] / total_reviews) * 100, 1)
+                        else:
+                            positive_pct = neutral_pct = negative_pct = 0
+
+                        # Fetch photo
                         photo_url = ""
                         photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                         photo_res = requests.get(photo_api, headers=headers)
@@ -159,14 +170,6 @@ if st.session_state.page == "Recommend":
                         if photos:
                             photo = photos[0]
                             photo_url = f"{photo['prefix']}original{photo['suffix']}"
-
-                        avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
-                        total_reviews = len(sentiments)
-
-                        # Sentiment percentages
-                        positive_pct = round(positive_count / total_reviews * 100, 1) if total_reviews else 0
-                        neutral_pct = round(neutral_count / total_reviews * 100, 1) if total_reviews else 0
-                        negative_pct = round(negative_count / total_reviews * 100, 1) if total_reviews else 0
 
                         if sentiments:
                             results.append({
@@ -188,10 +191,7 @@ if st.session_state.page == "Recommend":
                             "Address": r["Address"],
                             "Average Rating": r["Rating"],
                             "Stars": r["Stars"],
-                            "Reviews": r["Reviews"],
-                            "Positive %": r["Positive %"],
-                            "Neutral %": r["Neutral %"],
-                            "Negative %": r["Negative %"]
+                            "Reviews": r["Reviews"]
                         } for r in results])
                         df.index += 1
                         st.session_state.results = results
@@ -216,116 +216,56 @@ if st.session_state.page == "Recommend":
             if i < len(top3):
                 r = top3[i]
                 with col:
+                    # Generate small sentiment chart
+                    chart_uri = create_sentiment_chart(r.get("Positive %", 0), r.get("Neutral %", 0), r.get("Negative %", 0))
+
                     st.markdown(f"""
-                        <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
+                        <div style="background-color: {color}; border-radius: 15px; padding: 15px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
                             <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
                             <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
                             <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
-                            <div style="font-size: 14px; margin-top: 10px; text-align: left;">
-                                Positive: {r['Positive %']}%<br>
-                                Neutral: {r['Neutral %']}%<br>
-                                Negative: {r['Negative %']}%
+                            <img src="{chart_uri}" style="margin-top: 10px; margin-bottom: 10px; width: 100%;">
+                            <div style="font-size: 14px; text-align: left;">
+                                <b>Reviews:</b> {r['Reviews']}<br>
+                                <b>Sample Tips:</b> <i>{'<br>'.join(r['Tips'])}</i>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
 
-        # Plot sentiment breakdown bar chart for top 3 restaurants
-        st.divider()
-        st.subheader("📊 Sentiment Breakdown of Top 3 Restaurants")
+# -------- PAGE: History --------
+elif st.session_state.page == "History":
+    st.title("📜 Search History")
 
-        fig, ax = plt.subplots()
-        labels = [r["Restaurant"] for r in top3]
-        positives = [r["Positive %"] for r in top3]
-        neutrals = [r["Neutral %"] for r in top3]
-        negatives = [r["Negative %"] for r in top3]
-
-        width = 0.2
-        x = range(len(top3))
-
-        ax.bar(x, positives, width, label="Positive %", color="green")
-        ax.bar([p + width for p in x], neutrals, width, label="Neutral %", color="gray")
-        ax.bar([p + width*2 for p in x], negatives, width, label="Negative %", color="red")
-
-        ax.set_xticks([p + width for p in x])
-        ax.set_xticklabels(labels)
-        ax.set_ylim(0, 100)
-        ax.set_ylabel("Percentage")
-        ax.legend()
-        ax.set_title("Sentiment Breakdown for Top 3 Restaurants")
-
-        st.pyplot(fig)
-
-        st.divider()
-        top = max(st.session_state.results, key=lambda x: x["Rating"])
-        st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
-
-        top_pick = {
-            "Restaurant": top["Restaurant"],
-            "Rating": top["Rating"],
-            "Address": top["Address"],
-            "Food": food,
-            "Location": location
-        }
-        append_history(top_pick)
-
-        st.divider()
-        st.subheader("📸 Restaurant Highlights")
-
-        cols = st.columns(2)
-        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
-            with cols[idx % 2]:
-                st.markdown(f"### {r['Restaurant']}")
-                st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
-                if r["Image"]:
-                    st.markdown(f"""
-                        <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
-                            <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
-                        </div>
-                    """, unsafe_allow_html=True)
-                if r["Tips"]:
-                    st.markdown("💬 **Reviews:**")
-                    for tip in r["Tips"]:
-                        st.markdown(f"• _{tip}_")
-                st.markdown("---")
+    try:
+        records = read_history()
+        if not records:
+            st.info("No history found yet.")
+        else:
+            history_df = pd.DataFrame(records)
+            st.dataframe(history_df, use_container_width=True)
+    except Exception as e:
+        st.error(f"Error loading history: {e}")
 
 # -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
-    st.title("🤖 AI Sentiment Classifier")
-    st.markdown("Try the sentiment classifier on your own text.")
-
-    classifier = get_classifier()
-    input_text = st.text_area("Enter review text", height=150)
-
-    if st.button("Analyze Sentiment"):
-        if input_text.strip():
-            with st.spinner("Analyzing..."):
-                result = classifier(input_text[:512])[0]
-                label = result["label"]
-                score = round(result["score"], 3)
-                st.success(f"Sentiment: {label} (Confidence: {score})")
-        else:
-            st.warning("Please enter some text for analysis.")
-
-# -------- PAGE: History --------
-elif st.session_state.page == "History":
-    st.title("🕘 Search History")
-    history_data = read_history()
-    if history_data:
-        df_hist = pd.DataFrame(history_data)
-        df_hist.index += 1
-        st.dataframe(df_hist, use_container_width=True)
-    else:
-        st.info("No history found.")
+    st.title("🤖 About AI & Sentiment Analysis")
+    st.markdown("""
+    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews fetched from **Foursquare** API.
+    
+    The classifier is a fine-tuned multilingual BERT model (nlptown/bert-base-multilingual-uncased-sentiment) that predicts star ratings (1 to 5).
+    
+    Sentiment scores are used to help rank restaurants based on positive, neutral, and negative review percentages.
+    """)
 
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
-    This app recommends restaurants based on Foursquare's Places API combined with AI-powered sentiment analysis
-    of real user reviews (tips). It is built with Streamlit and HuggingFace Transformers.
-    
-    Developed by Your Name.
+    - Developed using Streamlit, Foursquare API, and HuggingFace Transformers.
+    - Sentiment analysis uses a pretrained BERT model.
+    - Created by your assistant 💡
     """)
 
+# Footer
+st.markdown('<div class="custom-footer">Made with ❤️ using Streamlit & Python</div>', unsafe_allow_html=True)
