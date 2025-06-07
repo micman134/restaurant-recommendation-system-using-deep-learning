@@ -56,7 +56,7 @@ def append_history(data_dict):
     location = data_dict.get("Location", "").strip()
 
     if not food or not location:
-        st.warning("Food or Location is empty, skipping save to history.")
+        #st.warning("Food or Location is empty, skipping save to history.")
         return
 
     sheet = get_gsheet()
