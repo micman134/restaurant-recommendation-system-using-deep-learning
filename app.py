@@ -3,11 +3,13 @@ import requests
 import pandas as pd
 from transformers import pipeline
 import matplotlib.pyplot as plt
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Hide Streamlit default UI and style footer
+# Hide Streamlit UI and footer
 st.markdown("""
     <style>
     #MainMenu, footer, header {visibility: hidden;}
@@ -24,7 +26,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Auto focus on first input (food)
+# Autofocus on the food input field
 st.markdown("""
     <script>
     const foodInput = window.parent.document.querySelectorAll('input[type="text"]')[0];
@@ -32,22 +34,41 @@ st.markdown("""
     </script>
 """, unsafe_allow_html=True)
 
-# ✅ Cache the sentiment analysis model
+# Load sentiment analysis model
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
-# Initialize the selected page in session_state
+# Google Sheets helpers
+@st.cache_resource
+def get_gsheet():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name("/mnt/data/neat-talent-394322-9ebc5bc04590.json", scope)
+    client = gspread.authorize(creds)
+    sheet = client.open("Restaurant_Recommender_History").sheet1
+    return sheet
+
+def read_history():
+    sheet = get_gsheet()
+    return sheet.get_all_records()
+
+def append_history(data_dict):
+    sheet = get_gsheet()
+    sheet.append_row(list(data_dict.values()))
+
+# Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
 
-# Sidebar menu
+# Sidebar navigation
 with st.sidebar:
     st.markdown("## 🍽️ Menu")
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
         st.session_state.page = "Deep Learning"
+    if st.button("History"):
+        st.session_state.page = "History"
     if st.button("About"):
         st.session_state.page = "About"
 
@@ -60,25 +81,19 @@ if st.session_state.page == "Recommend":
         st.session_state.results = None
         st.session_state.df = None
 
-    with st.container():
-        col1, _ = st.columns([1, 1])
-        with col1:
-            food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza", help="Enter the kind of food you want to search for.")
+    col1, _ = st.columns([1, 1])
+    with col1:
+        food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
-    with st.container():
-        col1, _ = st.columns([1, 1])
-        with col1:
-            location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria", help="Enter the city or area where you're searching for food.")
+    col1, _ = st.columns([1, 1])
+    with col1:
+        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
     if st.button("🔍 Search"):
-        if not food and not location:
+        if not food or not location:
             st.warning("\u26a0\ufe0f Please enter both a food type and location.")
-        elif not food:
-            st.warning("\u26a0\ufe0f Please enter a food type.")
-        elif not location:
-            st.warning("\u26a0\ufe0f Please enter a location.")
         elif not api_key:
             st.error("\u274c Foursquare API key is missing.")
         else:
@@ -94,7 +109,7 @@ if st.session_state.page == "Recommend":
                 if not restaurants:
                     st.error("\u274c No restaurants found. Try different search terms.")
                 else:
-                    classifier = get_classifier()  # ✅ Load cached model
+                    classifier = get_classifier()
                     results = []
 
                     for r in restaurants:
@@ -123,7 +138,7 @@ if st.session_state.page == "Recommend":
 
                         avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
 
-                        if sentiments:  # ✅ Only include if reviews are available
+                        if sentiments:
                             results.append({
                                 "Restaurant": name,
                                 "Address": address,
@@ -154,7 +169,6 @@ if st.session_state.page == "Recommend":
         st.dataframe(st.session_state.df, use_container_width=True)
 
         top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
-
         st.divider()
         st.subheader("🏅 AI (Deep Learning) Top Picks")
 
@@ -178,6 +192,15 @@ if st.session_state.page == "Recommend":
         st.divider()
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+
+        top_pick = {
+            "Restaurant": top["Restaurant"],
+            "Rating": top["Rating"],
+            "Address": top["Address"],
+            "Food": food,
+            "Location": location
+        }
+        append_history(top_pick)
 
         st.divider()
         st.subheader("📸 Restaurant Highlights")
@@ -209,10 +232,25 @@ elif st.session_state.page == "Deep Learning":
     ### How it works:
     - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
     - Retrieves recent user reviews ("tips") for each restaurant.
-    - Uses a pretrained **BERT sentiment analysis model** (`nlptown/bert-base-multilingual-uncased-sentiment`) to analyze each review.
+    - Uses a pretrained **BERT sentiment analysis model** to analyze each review.
     - Aggregates the sentiment scores into an average rating per restaurant.
     - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
     """)
+
+# -------- PAGE: History --------
+elif st.session_state.page == "History":
+    st.title("📜 History of Top Picks")
+    st.markdown("This shows a list of all your top recommended restaurants saved to Google Sheets.")
+    try:
+        history = read_history()
+        if history:
+            df = pd.DataFrame(history)
+            df.index += 1
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No history found yet.")
+    except Exception as e:
+        st.error(f"⚠️ Error loading history: {e}")
 
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
