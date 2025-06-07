@@ -43,7 +43,9 @@ def get_classifier():
 @st.cache_resource
 def get_gsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("/mnt/data/neat-talent-394322-9ebc5bc04590.json", scope)
+    
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
+
     client = gspread.authorize(creds)
     sheet = client.open("Restaurant_Recommender_History").sheet1
     return sheet
