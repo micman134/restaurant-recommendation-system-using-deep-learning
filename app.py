@@ -52,24 +52,30 @@ def read_history():
     return sheet.get_all_records()
 
 def append_history(data_dict):
+    food = data_dict.get("Food", "").strip()
+    location = data_dict.get("Location", "").strip()
+
+    if not food or not location:
+        st.warning("Food or Location is empty, skipping save to history.")
+        return
+
     sheet = get_gsheet()
     existing_rows = sheet.get_all_records()
 
-    # Check for duplicates
+    # Check for duplicate entry
     for row in existing_rows:
         if (row.get("Restaurant") == data_dict.get("Restaurant") and
-            row.get("Food") == data_dict.get("Food") and
-            row.get("Location") == data_dict.get("Location")):
+            row.get("Food") == food and
+            row.get("Location") == location):
             st.info("This recommendation is already saved in history. Skipping append.")
             return
 
-    # Append new entry
     row = [
         data_dict.get("Restaurant", ""),
         data_dict.get("Rating", ""),
         data_dict.get("Address", ""),
-        data_dict.get("Food", ""),
-        data_dict.get("Location", "")
+        food,
+        location
     ]
     sheet.append_row(row)
     st.success("New recommendation saved to history!")
@@ -111,9 +117,9 @@ if st.session_state.page == "Recommend":
 
     if st.button("🔍 Search"):
         if not food or not location:
-            st.warning("\u26a0\ufe0f Please enter both a food type and location.")
+            st.warning("⚠️ Please enter both a food type and location.")
         elif not api_key:
-            st.error("\u274c Foursquare API key is missing.")
+            st.error("❌ Foursquare API key is missing.")
         else:
             st.session_state.results = None
             st.session_state.df = None
@@ -125,7 +131,7 @@ if st.session_state.page == "Recommend":
                 restaurants = res.json().get("results", [])
 
                 if not restaurants:
-                    st.error("\u274c No restaurants found. Try different search terms.")
+                    st.error("❌ No restaurants found. Try different search terms.")
                 else:
                     classifier = get_classifier()
                     results = []
