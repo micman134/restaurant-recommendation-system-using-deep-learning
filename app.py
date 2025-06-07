@@ -66,7 +66,7 @@ def append_history(data_dict):
         if (row.get("Restaurant") == data_dict.get("Restaurant") and
             row.get("Food") == food and
             row.get("Location") == location):
-            st.info("This recommendation is already saved in history. Skipping append.")
+            #st.info("This recommendation is already saved in history. Skipping append.")
             return
 
     row = [
