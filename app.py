@@ -61,8 +61,8 @@ def append_history(data_dict):
         data_dict.get("Food", ""),
         data_dict.get("Location", "")
     ]
-    st.write("Appending to Google Sheet:", row)
-    sheet.append_row(row)
+    #st.write("Appending to Google Sheet:", row)
+    #sheet.append_row(row)
 
 # Session state initialization
 if "page" not in st.session_state:
