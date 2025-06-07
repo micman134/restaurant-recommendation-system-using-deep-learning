@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
-import matplotlib.pyplot as plt
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -43,9 +42,7 @@ def get_classifier():
 @st.cache_resource
 def get_gsheet():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
     creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-
     client = gspread.authorize(creds)
     sheet = client.open("Restaurant_Recommender_History").sheet1
     return sheet
@@ -56,11 +53,22 @@ def read_history():
 
 def append_history(data_dict):
     sheet = get_gsheet()
-    sheet.append_row(list(data_dict.values()))
+    # Explicit column order matching your Google Sheet columns
+    row = [
+        data_dict.get("Restaurant", ""),
+        data_dict.get("Rating", ""),
+        data_dict.get("Address", ""),
+        data_dict.get("Food", ""),
+        data_dict.get("Location", "")
+    ]
+    st.write("Appending to Google Sheet:", row)
+    sheet.append_row(row)
 
 # Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
+if "history_saved" not in st.session_state:
+    st.session_state.history_saved = False
 
 # Sidebar navigation
 with st.sidebar:
@@ -101,6 +109,7 @@ if st.session_state.page == "Recommend":
         else:
             st.session_state.results = None
             st.session_state.df = None
+            st.session_state.history_saved = False  # Reset history saved flag on new search
 
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
@@ -195,14 +204,17 @@ if st.session_state.page == "Recommend":
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
-        top_pick = {
-            "Restaurant": top["Restaurant"],
-            "Rating": top["Rating"],
-            "Address": top["Address"],
-            "Food": food,
-            "Location": location
-        }
-        append_history(top_pick)
+        # Append to history only once per search
+        if not st.session_state.history_saved:
+            top_pick = {
+                "Restaurant": top["Restaurant"],
+                "Rating": top["Rating"],
+                "Address": top["Address"],
+                "Food": food,
+                "Location": location
+            }
+            append_history(top_pick)
+            st.session_state.history_saved = True
 
         st.divider()
         st.subheader("📸 Restaurant Highlights")
