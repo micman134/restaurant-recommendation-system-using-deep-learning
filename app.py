@@ -56,7 +56,6 @@ def append_history(data_dict):
     location = data_dict.get("Location", "").strip()
 
     if not food or not location:
-        #st.warning("Food or Location is empty, skipping save to history.")
         return
 
     sheet = get_gsheet()
@@ -213,6 +212,20 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
+        # ======== Gallery Pick Section ========
+        st.divider()
+        st.subheader("🖼️ Gallery Pick")
+
+        gallery_cols = st.columns(3)
+        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
+            with gallery_cols[idx % 3]:
+                if r["Image"]:
+                    st.image(r["Image"], caption=f"{r['Restaurant']} — ⭐ {r['Rating']}", use_column_width=True)
+                else:
+                    st.markdown(f"### {r['Restaurant']}")
+                    st.markdown(f"⭐ {r['Rating']}")
+        # ================================
+
         st.divider()
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
@@ -256,41 +269,40 @@ elif st.session_state.page == "Deep Learning":
     ### How it works:
     - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
     - Retrieves recent user reviews ("tips") for each restaurant.
-    - Uses a pretrained **BERT sentiment analysis model** to analyze each review.
-    - Aggregates the sentiment scores into an average rating per restaurant.
-    - Ranks restaurants based on AI-analyzed customer sentiment rather than just numerical ratings.
+    - Uses a pretrained **BERT sentiment analysis model** to analyze the sentiment of these reviews.
+    - Calculates an average rating score from the sentiment predictions.
+    - Ranks restaurants by these AI-driven scores to recommend the best places.
+
+    Feel free to explore the Recommend tab and try it yourself!
     """)
 
 # -------- PAGE: History --------
 elif st.session_state.page == "History":
-    st.title("📜 History of Top Picks")
-    st.markdown("This shows a list of all your top recommended restaurants saved to Google Sheets.")
-    try:
-        history = read_history()
-        if history:
-            df = pd.DataFrame(history)
-            df.index += 1
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info("No history found yet.")
-    except Exception as e:
-        st.error(f"⚠️ Error loading history: {e}")
+    st.title("📚 Recommendation History")
+
+    history_data = read_history()
+    if not history_data:
+        st.info("No history available yet. Try making some recommendations first!")
+    else:
+        df_hist = pd.DataFrame(history_data)
+        df_hist.index += 1
+        st.dataframe(df_hist, use_container_width=True)
 
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
-    **AI Restaurant Recommender** was built to help you discover great places to eat by combining:
-    - Real user reviews,
-    - AI sentiment analysis,
-    - And Foursquare's extensive location data.
+    **AI Restaurant Recommender** is a Streamlit web app designed to help you discover top restaurants based on your food cravings and location using:
 
-    Thanks for trying out the app! 🍽️
+    - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
+    - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
+    - Google Sheets to save and track your recommendation history.
+
+    Developed by YourName.
+
+    --- 
+    _Powered by OpenAI and Streamlit._
     """)
 
 # Footer
-st.markdown("""
-    <div class="custom-footer">
-        © 2025 AI (Deep Learning) Restaurant Recommender Final Year Project·
-    </div>
-""", unsafe_allow_html=True)
+st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
