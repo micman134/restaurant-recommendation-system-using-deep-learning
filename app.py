@@ -53,7 +53,17 @@ def read_history():
 
 def append_history(data_dict):
     sheet = get_gsheet()
-    # Explicit column order matching your Google Sheet columns
+    existing_rows = sheet.get_all_records()
+
+    # Check for duplicates
+    for row in existing_rows:
+        if (row.get("Restaurant") == data_dict.get("Restaurant") and
+            row.get("Food") == data_dict.get("Food") and
+            row.get("Location") == data_dict.get("Location")):
+            st.info("This recommendation is already saved in history. Skipping append.")
+            return
+
+    # Append new entry
     row = [
         data_dict.get("Restaurant", ""),
         data_dict.get("Rating", ""),
@@ -61,14 +71,12 @@ def append_history(data_dict):
         data_dict.get("Food", ""),
         data_dict.get("Location", "")
     ]
-    #st.write("Appending to Google Sheet:", row)
-    #sheet.append_row(row)
+    sheet.append_row(row)
+    st.success("New recommendation saved to history!")
 
 # Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
-if "history_saved" not in st.session_state:
-    st.session_state.history_saved = False
 
 # Sidebar navigation
 with st.sidebar:
@@ -109,7 +117,6 @@ if st.session_state.page == "Recommend":
         else:
             st.session_state.results = None
             st.session_state.df = None
-            st.session_state.history_saved = False  # Reset history saved flag on new search
 
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
@@ -204,17 +211,14 @@ if st.session_state.page == "Recommend":
         top = max(st.session_state.results, key=lambda x: x["Rating"])
         st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
-        # Append to history only once per search
-        if not st.session_state.history_saved:
-            top_pick = {
-                "Restaurant": top["Restaurant"],
-                "Rating": top["Rating"],
-                "Address": top["Address"],
-                "Food": food,
-                "Location": location
-            }
-            append_history(top_pick)
-            st.session_state.history_saved = True
+        top_pick = {
+            "Restaurant": top["Restaurant"],
+            "Rating": top["Rating"],
+            "Address": top["Address"],
+            "Food": food,
+            "Location": location
+        }
+        append_history(top_pick)
 
         st.divider()
         st.subheader("📸 Restaurant Highlights")
