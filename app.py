@@ -36,7 +36,7 @@ st.markdown("""
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
     .navbar-title {
-        font-size: 24px;
+        font-size: 18px;
         font-weight: bold;
     }
     </style>
@@ -45,7 +45,7 @@ st.markdown("""
 # Add navbar/header
 st.markdown("""
     <div class="navbar">
-        <div class="navbar-title">AI Recommender</div>
+        <div class="navbar-title">🍽️ Restaurant Recommender</div>
     </div>
 """, unsafe_allow_html=True)
 
