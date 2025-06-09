@@ -61,10 +61,12 @@ def append_history(data_dict):
     sheet = get_gsheet()
     existing_rows = sheet.get_all_records()
 
+    # Check for duplicate entry
     for row in existing_rows:
         if (row.get("Restaurant") == data_dict.get("Restaurant") and
             row.get("Food") == food and
             row.get("Location") == location):
+            #st.info("This recommendation is already saved in history. Skipping append.")
             return
 
     row = [
@@ -77,9 +79,11 @@ def append_history(data_dict):
     sheet.append_row(row)
     st.success("New recommendation saved to history!")
 
+# Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
 
+# Sidebar navigation
 with st.sidebar:
     st.markdown("## 🍽️ Menu")
     if st.button("Recommend"):
@@ -91,6 +95,7 @@ with st.sidebar:
     if st.button("About"):
         st.session_state.page = "About"
 
+# -------- PAGE: Recommend --------
 if st.session_state.page == "Recommend":
     st.title("🍽️ AI Restaurant Recommender")
     st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
@@ -160,10 +165,10 @@ if st.session_state.page == "Recommend":
                             "Restaurant": name,
                             "Address": address,
                             "Rating": avg_rating,
-                            "Stars": "⭐" * int(round(avg_rating)) if avg_rating else "No rating",
+                            "Stars": "⭐" * int(round(avg_rating)) if avg_rating > 0 else "No reviews",
                             "Reviews": len(sentiments),
                             "Image": photo_url,
-                            "Tips": review_texts[:2] if sentiments else []
+                            "Tips": review_texts[:2] if review_texts else ["No reviews available"]
                         })
 
                     if results:
@@ -178,14 +183,17 @@ if st.session_state.page == "Recommend":
                         st.session_state.results = results
                         st.session_state.df = df
                     else:
-                        st.warning("Found restaurants, but no reviews available.")
+                        st.warning("No restaurants found with the given criteria.")
 
     if st.session_state.results:
         st.divider()
         st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
-        top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
+        # Filter out restaurants with zero reviews for top picks
+        reviewed_restaurants = [r for r in st.session_state.results if r["Reviews"] > 0]
+        top3 = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:3] if reviewed_restaurants else []
+        
         st.divider()
         st.subheader("🏅 AI (Deep Learning) Top Picks")
 
@@ -206,53 +214,58 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
+        # ======== Gallery Pick Section ========
         st.divider()
-         
-        top = max(st.session_state.results, key=lambda x: x["Rating"])
-        st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+        st.subheader("🖼️ Gallery Pick")
 
-        top_pick = {
-            "Restaurant": top["Restaurant"],
-            "Rating": top["Rating"],
-            "Address": top["Address"],
-            "Food": food,
-            "Location": location
-        }
-        append_history(top_pick)
+        gallery_cols = st.columns(3)
+        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
+            with gallery_cols[idx % 3]:
+                if r["Image"]:
+                    st.image(r["Image"], caption=f"{r['Restaurant']} — {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}", use_column_width=True)
+                else:
+                    st.markdown(f"### {r['Restaurant']}")
+                    st.markdown(f"{'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}")
+
+        # ================================
+
+        st.divider()
+        if reviewed_restaurants:
+            top = max(reviewed_restaurants, key=lambda x: x["Rating"])
+            st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+
+            top_pick = {
+                "Restaurant": top["Restaurant"],
+                "Rating": top["Rating"],
+                "Address": top["Address"],
+                "Food": food,
+                "Location": location
+            }
+            append_history(top_pick)
+        else:
+            st.warning("No restaurants with reviews found to select a top pick.")
 
         st.divider()
         st.subheader("📸 Restaurant Highlights")
 
         cols = st.columns(2)
-        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
+        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
             with cols[idx % 2]:
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
                 if r["Image"]:
                     st.markdown(f"""
                         <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
                             <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
                         </div>
                     """, unsafe_allow_html=True)
-                if r["Tips"]:
-                    st.markdown("💬 **Reviews:**")
-                    for tip in r["Tips"]:
-                        st.markdown(f"• _{tip}_")
+                st.markdown("💬 **Reviews:**")
+                for tip in r["Tips"]:
+                    st.markdown(f"• _{tip}_")
                 st.markdown("---")
 
-        top = max(st.session_state.results, key=lambda x: x["Rating"])
-        st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
-
-        top_pick = {
-            "Restaurant": top["Restaurant"],
-            "Rating": top["Rating"],
-            "Address": top["Address"],
-            "Food": food,
-            "Location": location
-        }
-        append_history(top_pick)
-
+# -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
     st.title("🤖 Deep Learning Explained")
     st.markdown("""
@@ -268,8 +281,10 @@ elif st.session_state.page == "Deep Learning":
     Feel free to explore the Recommend tab and try it yourself!
     """)
 
+# -------- PAGE: History --------
 elif st.session_state.page == "History":
     st.title("📚 Recommendation History")
+
     history_data = read_history()
     if not history_data:
         st.info("No history available yet. Try making some recommendations first!")
@@ -278,6 +293,7 @@ elif st.session_state.page == "History":
         df_hist.index += 1
         st.dataframe(df_hist, use_container_width=True)
 
+# -------- PAGE: About --------
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
@@ -287,8 +303,11 @@ elif st.session_state.page == "About":
     - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
     - Google Sheets to save and track your recommendation history.
 
+    
+
     --- 
     _Powered by OpenAI and Streamlit._
     """)
 
+# Footer
 st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
