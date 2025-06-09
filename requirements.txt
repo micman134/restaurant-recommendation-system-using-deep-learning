@@ -8,4 +8,3 @@ geocoder
 matplotlib>=3.4.0
 gspread
 oauth2client
-transformers==4.30.0
