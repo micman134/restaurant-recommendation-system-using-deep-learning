@@ -11,7 +11,7 @@ st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 # Hide Streamlit UI and footer
 st.markdown("""
     <style>
-    #MainMenu, footer, header {visibility: hidden;}
+    #MainMenu, footer {visibility: hidden;}
     .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
         display: none !important;
     }
@@ -22,7 +22,31 @@ st.markdown("""
         padding: 20px;
         color: #aaa;
     }
+    .navbar {
+        height: 80px;
+        background-color: #1a1a1a;
+        color: white;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 20px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .navbar-title {
+        font-size: 24px;
+        font-weight: bold;
+    }
     </style>
+""", unsafe_allow_html=True)
+
+# Add navbar/header
+st.markdown("""
+    <div class="navbar">
+        <div class="navbar-title">AI Recommender</div>
+    </div>
 """, unsafe_allow_html=True)
 
 # Autofocus on the food input field
