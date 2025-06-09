@@ -207,6 +207,20 @@ if st.session_state.page == "Recommend":
                     """, unsafe_allow_html=True)
 
         st.divider()
+         
+        top = max(st.session_state.results, key=lambda x: x["Rating"])
+        st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+
+        top_pick = {
+            "Restaurant": top["Restaurant"],
+            "Rating": top["Rating"],
+            "Address": top["Address"],
+            "Food": food,
+            "Location": location
+        }
+        append_history(top_pick)
+
+        st.divider()
         st.subheader("📸 Restaurant Highlights")
 
         cols = st.columns(2)
