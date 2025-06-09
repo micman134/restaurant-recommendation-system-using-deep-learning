@@ -22,6 +22,19 @@ st.markdown("""
         padding: 20px;
         color: #aaa;
     }
+    .restaurant-card {
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        background-color: #f9f9f9;
+    }
+    .zero-review {
+        border-left: 5px solid #ff9800;
+    }
+    .top-rated {
+        border-left: 5px solid #4caf50;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -66,7 +79,6 @@ def append_history(data_dict):
         if (row.get("Restaurant") == data_dict.get("Restaurant") and
             row.get("Food") == food and
             row.get("Location") == location):
-            #st.info("This recommendation is already saved in history. Skipping append.")
             return
 
     row = [
@@ -134,6 +146,7 @@ if st.session_state.page == "Recommend":
                 else:
                     classifier = get_classifier()
                     results = []
+                    zero_review_restaurants = []
 
                     for r in restaurants:
                         fsq_id = r['fsq_id']
@@ -145,12 +158,7 @@ if st.session_state.page == "Recommend":
                         tips = tips_res.json()
                         review_texts = [tip["text"] for tip in tips[:5]] if tips else []
 
-                        sentiments = []
-                        for tip in review_texts:
-                            result = classifier(tip[:512])[0]
-                            stars = int(result["label"].split()[0])
-                            sentiments.append(stars)
-
+                        # Get photo
                         photo_url = ""
                         photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
                         photo_res = requests.get(photo_api, headers=headers)
@@ -159,9 +167,15 @@ if st.session_state.page == "Recommend":
                             photo = photos[0]
                             photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
-                        avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+                        if review_texts:
+                            sentiments = []
+                            for tip in review_texts:
+                                result = classifier(tip[:512])[0]
+                                stars = int(result["label"].split()[0])
+                                sentiments.append(stars)
 
-                        if sentiments:
+                            avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+
                             results.append({
                                 "Restaurant": name,
                                 "Address": address,
@@ -169,96 +183,156 @@ if st.session_state.page == "Recommend":
                                 "Stars": "⭐" * int(round(avg_rating)),
                                 "Reviews": len(sentiments),
                                 "Image": photo_url,
-                                "Tips": review_texts[:2]
+                                "Tips": review_texts[:2],
+                                "HasReviews": True
+                            })
+                        else:
+                            zero_review_restaurants.append({
+                                "Restaurant": name,
+                                "Address": address,
+                                "Rating": 0,
+                                "Stars": "⭐" * 0,
+                                "Reviews": 0,
+                                "Image": photo_url,
+                                "Tips": [],
+                                "HasReviews": False
                             })
 
-                    if results:
+                    # Combine both lists for display
+                    all_restaurants = results + zero_review_restaurants
+                    
+                    if all_restaurants:
                         df = pd.DataFrame([{
                             "Restaurant": r["Restaurant"],
                             "Address": r["Address"],
-                            "Average Rating": r["Rating"],
+                            "Rating": r["Rating"],
                             "Stars": r["Stars"],
-                            "Reviews": r["Reviews"]
-                        } for r in results])
+                            "Reviews": r["Reviews"],
+                            "Has Reviews": "Yes" if r["HasReviews"] else "No"
+                        } for r in all_restaurants])
                         df.index += 1
-                        st.session_state.results = results
+                        st.session_state.results = all_restaurants
                         st.session_state.df = df
                     else:
-                        st.warning("Found restaurants, but no reviews available.")
+                        st.warning("No restaurants found with reviews.")
 
     if st.session_state.results:
         st.divider()
-        st.subheader("📊 Restaurants Search Results and Ratings")
+        st.subheader("📊 All Restaurants (Including Zero-Review)")
         st.dataframe(st.session_state.df, use_container_width=True)
 
-        top3 = sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)[:3]
-        st.divider()
-        st.subheader("🏅 AI (Deep Learning) Top Picks")
+        # Filter out restaurants with reviews for top picks
+        reviewed_restaurants = [r for r in st.session_state.results if r["HasReviews"]]
+        
+        if reviewed_restaurants:
+            top3 = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:3]
+            st.divider()
+            st.subheader("🏅 AI (Deep Learning) Top Picks")
 
-        cols = st.columns(3)
-        medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
-        colors = ["#FFD700", "#C0C0C0", "#CD7F32"]
+            cols = st.columns(3)
+            medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
+            colors = ["#FFD700", "#C0C0C0", "#CD7F32"]
 
-        for i, (col, medal, color) in enumerate(zip(cols, medals, colors)):
-            if i < len(top3):
-                r = top3[i]
-                with col:
-                    st.markdown(f"""
-                        <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
-                            <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
-                            <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
-                            <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
-                            <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
-                        </div>
-                    """, unsafe_allow_html=True)
+            for i, (col, medal, color) in enumerate(zip(cols, medals, colors)):
+                if i < len(top3):
+                    r = top3[i]
+                    with col:
+                        st.markdown(f"""
+                            <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
+                                <div style="font-size: 22px; margin-bottom: 10px;">{medal}</div>
+                                <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
+                                <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
+                                <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
+                            </div>
+                        """, unsafe_allow_html=True)
 
-        # ======== Gallery Pick Section ========
-        st.divider()
-        st.subheader("🖼️ Gallery Pick")
-
-        gallery_cols = st.columns(3)
-        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
-            with gallery_cols[idx % 3]:
-                if r["Image"]:
-                    st.image(r["Image"], caption=f"{r['Restaurant']} — ⭐ {r['Rating']}", use_column_width=True)
+            st.divider()
+            st.subheader("🌟 Restaurant Highlights")
+            
+            # Create tabs for different categories
+            tab1, tab2, tab3 = st.tabs(["Top Rated", "New Discoveries", "All Restaurants"])
+            
+            with tab1:
+                st.markdown("### 🏆 Top Rated Restaurants")
+                top_rated = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:5]
+                for r in top_rated:
+                    with st.container():
+                        st.markdown(f"""
+                            <div class="restaurant-card top-rated">
+                                <h3>{r['Restaurant']} <span style="color: #4caf50;">⭐ {r['Rating']}</span></h3>
+                                <p><strong>📍 Address:</strong> {r['Address']}</p>
+                                <p><strong>📊 Reviews:</strong> {r['Reviews']} reviews</p>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        if r["Image"]:
+                            st.image(r["Image"], use_column_width=True)
+                        
+                        if r["Tips"]:
+                            with st.expander("See recent reviews"):
+                                for tip in r["Tips"]:
+                                    st.markdown(f"- _{tip}_")
+            
+            with tab2:
+                st.markdown("### 🆕 New Discoveries (Zero Reviews)")
+                if zero_review_restaurants:
+                    for r in zero_review_restaurants[:5]:
+                        with st.container():
+                            st.markdown(f"""
+                                <div class="restaurant-card zero-review">
+                                    <h3>{r['Restaurant']}</h3>
+                                    <p><strong>📍 Address:</strong> {r['Address']}</p>
+                                    <p><em>No reviews yet - Be the first to try!</em></p>
+                                </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if r["Image"]:
+                                st.image(r["Image"], use_column_width=True)
                 else:
-                    st.markdown(f"### {r['Restaurant']}")
-                    st.markdown(f"⭐ {r['Rating']}")
-        # ================================
+                    st.info("No zero-review restaurants found in this search.")
+            
+            with tab3:
+                st.markdown("### 🍽️ All Restaurants")
+                for r in st.session_state.results:
+                    with st.container():
+                        if r["HasReviews"]:
+                            st.markdown(f"""
+                                <div class="restaurant-card">
+                                    <h3>{r['Restaurant']} <span style="color: #2196f3;">⭐ {r['Rating']}</span></h3>
+                                    <p><strong>📍 Address:</strong> {r['Address']}</p>
+                                    <p><strong>📊 Reviews:</strong> {r['Reviews']} reviews</p>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                                <div class="restaurant-card zero-review">
+                                    <h3>{r['Restaurant']}</h3>
+                                    <p><strong>📍 Address:</strong> {r['Address']}</p>
+                                    <p><em>No reviews available</em></p>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        
+                        if r["Image"]:
+                            st.image(r["Image"], use_column_width=True)
+                        
+                        if r["Tips"]:
+                            with st.expander("See recent reviews"):
+                                for tip in r["Tips"]:
+                                    st.markdown(f"- _{tip}_")
 
-        st.divider()
-        top = max(st.session_state.results, key=lambda x: x["Rating"])
-        st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+            if reviewed_restaurants:
+                st.divider()
+                top = max(reviewed_restaurants, key=lambda x: x["Rating"])
+                st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
 
-        top_pick = {
-            "Restaurant": top["Restaurant"],
-            "Rating": top["Rating"],
-            "Address": top["Address"],
-            "Food": food,
-            "Location": location
-        }
-        append_history(top_pick)
-
-        st.divider()
-        st.subheader("📸 Restaurant Highlights")
-
-        cols = st.columns(2)
-        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"], reverse=True)):
-            with cols[idx % 2]:
-                st.markdown(f"### {r['Restaurant']}")
-                st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
-                if r["Image"]:
-                    st.markdown(f"""
-                        <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
-                            <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
-                        </div>
-                    """, unsafe_allow_html=True)
-                if r["Tips"]:
-                    st.markdown("💬 **Reviews:**")
-                    for tip in r["Tips"]:
-                        st.markdown(f"• _{tip}_")
-                st.markdown("---")
+                top_pick = {
+                    "Restaurant": top["Restaurant"],
+                    "Rating": top["Rating"],
+                    "Address": top["Address"],
+                    "Food": food,
+                    "Location": location
+                }
+                append_history(top_pick)
 
 # -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
@@ -297,8 +371,6 @@ elif st.session_state.page == "About":
     - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
     - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
     - Google Sheets to save and track your recommendation history.
-
-    
 
     --- 
     _Powered by OpenAI and Streamlit._
