@@ -224,8 +224,9 @@ if st.session_state.page == "Recommend":
                 if r["Image"]:
                     st.image(r["Image"], caption=f"{r['Restaurant']} — {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}", use_column_width=True)
                 else:
-                    st.markdown(f"### {r['Restaurant']}")
-                    st.markdown(f"{'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}")
+                    vii = r["Image"]
+                    #st.markdown(f"### {r['Restaurant']}")
+                    #st.markdown(f"{'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}")
 
         # ================================
 
