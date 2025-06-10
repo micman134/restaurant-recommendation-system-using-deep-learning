@@ -125,7 +125,7 @@ if st.session_state.page == "Recommend":
 
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
-                params = {"query": food, "near": location, "limit": 40}
+                params = {"query": food, "near": location, "limit": 10}
                 res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
                 restaurants = res.json().get("results", [])
 
