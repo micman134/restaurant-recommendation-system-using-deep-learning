@@ -8,7 +8,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Add dark overlay background and custom styles
+# Add background image and dark overlay
 st.markdown(
     """
     <style>
@@ -28,93 +28,21 @@ st.markdown(
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.75);
+        background: rgba(0, 0, 0, 0.7);
         z-index: -1;
     }
     
-    /* Main content area */
-    .main .block-container {
-        background-color: rgba(30, 30, 30, 0.9);
-        border-radius: 10px;
-        padding: 2rem;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        color: #ffffff;
-    }
-    
-    /* Sidebar */
-    .stSidebar {
-        background-color: rgba(40, 40, 40, 0.95) !important;
-        color: white !important;
-    }
-    
-    /* Sidebar buttons */
-    .stButton button {
-        width: 100%;
-        background-color: #333 !important;
-        color: white !important;
-        border: 1px solid #555 !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .stButton button:hover {
-        background-color: #444 !important;
-        border-color: #777 !important;
-    }
-    
-    /* Dataframe styling */
-    .stDataFrame {
-        background-color: rgba(40, 40, 40, 0.95) !important;
-        color: white !important;
-    }
-    
-    /* Text input fields */
-    .stTextInput input, .stTextArea textarea {
-        background-color: rgba(50, 50, 50, 0.95) !important;
-        color: white !important;
-        border: 1px solid #555 !important;
-    }
-    
-    /* Hide Streamlit UI and footer */
+    /* Keep all your existing styles below */
     #MainMenu, footer, header {visibility: hidden;}
     .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
         display: none !important;
     }
-    
-    /* Custom footer */
     .custom-footer {
         text-align: center;
         font-size: 14px;
         margin-top: 50px;
         padding: 20px;
         color: #aaa;
-        background-color: rgba(30, 30, 30, 0.8);
-        border-radius: 10px;
-    }
-    
-    /* Primary button */
-    .stButton>button {
-        background-color: #4CAF50 !important;
-        color: white !important;
-        border: none !important;
-        padding: 10px 24px !important;
-        font-size: 16px !important;
-        border-radius: 8px !important;
-        transition: all 0.3s ease !important;
-    }
-    
-    .stButton>button:hover {
-        background-color: #45a049 !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-    }
-    
-    /* Text elements */
-    h1, h2, h3, h4, h5, h6, p, div, span {
-        color: white !important;
-    }
-    
-    /* Divider color */
-    hr {
-        border-color: #555 !important;
     }
     </style>
     """,
@@ -162,6 +90,7 @@ def append_history(data_dict):
         if (row.get("Restaurant") == data_dict.get("Restaurant") and
             row.get("Food") == food and
             row.get("Location") == location):
+            #st.info("This recommendation is already saved in history. Skipping append.")
             return
 
     row = [
@@ -309,7 +238,7 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
-        # Gallery Pick Section
+        # ======== Gallery Pick Section ========
         st.divider()
         st.subheader("🖼️ Gallery Pick")
 
@@ -318,6 +247,13 @@ if st.session_state.page == "Recommend":
             with gallery_cols[idx % 3]:
                 if r["Image"]:
                     st.image(r["Image"], caption=f"{r['Restaurant']} — {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}", use_column_width=True)
+                else:
+                    continue
+                    #vii = r["Image"]
+                    #st.markdown(f"### {r['Restaurant']}")
+                    #st.markdown(f"{'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}")
+
+        # ================================
 
         st.divider()
         if reviewed_restaurants:
@@ -362,21 +298,14 @@ elif st.session_state.page == "Deep Learning":
     This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews and provide AI-driven recommendations.
 
     ### How it works:
-    - Fetches nearby restaurants from the **Foursquare API** based on your food and location input
-    - Retrieves recent user reviews ("tips") for each restaurant
-    - Uses a pretrained **BERT sentiment analysis model** to analyze the sentiment
-    - Calculates an average rating score from the sentiment predictions
-    - Ranks restaurants by these AI-driven scores to recommend the best places
+    - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
+    - Retrieves recent user reviews ("tips") for each restaurant.
+    - Uses a pretrained **BERT sentiment analysis model** to analyze the sentiment of these reviews.
+    - Calculates an average rating score from the sentiment predictions.
+    - Ranks restaurants by these AI-driven scores to recommend the best places.
 
-    <div style="background-color: rgba(50, 50, 50, 0.7); padding: 15px; border-radius: 10px; margin-top: 20px;">
-    <h4 style="color: #4CAF50;">Technical Details</h4>
-    <ul>
-        <li>Model: <code>nlptown/bert-base-multilingual-uncased-sentiment</code></li>
-        <li>Processes reviews in multiple languages</li>
-        <li>Converts sentiment to 1-5 star ratings</li>
-    </ul>
-    </div>
-    """, unsafe_allow_html=True)
+    Feel free to explore the Recommend tab and try it yourself!
+    """)
 
 # -------- PAGE: History --------
 elif st.session_state.page == "History":
@@ -394,28 +323,17 @@ elif st.session_state.page == "History":
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
-    <div style="background-color: rgba(50, 50, 50, 0.7); padding: 20px; border-radius: 10px;">
     **AI Restaurant Recommender** is a Streamlit web app designed to help you discover top restaurants based on your food cravings and location using:
 
-    - [Foursquare API](https://developer.foursquare.com/) for places and user reviews
-    - State-of-the-art BERT-based sentiment analysis model from Hugging Face
-    - Google Sheets to save and track your recommendation history
+    - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
+    - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
+    - Google Sheets to save and track your recommendation history.
 
-    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #555;">
-    <h4>Credits</h4>
-    <p>Background photo by <a href="https://unsplash.com/@kobbyfotos" style="color: #4CAF50;">Kobby Mendez</a> on Unsplash</p>
-    </div>
-    </div>
-    """, unsafe_allow_html=True)
+    
+
+    --- 
+    _Powered by OpenAI and Streamlit._
+    """)
 
 # Footer
-st.markdown(
-    """
-    <div class="custom-footer">
-        © 2025 AI Restaurant Recommender | 
-        <a href="#" style="color: #4CAF50;">Privacy Policy</a> | 
-        <a href="#" style="color: #4CAF50;">Terms of Service</a>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
