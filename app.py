@@ -2,8 +2,9 @@ import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import firebase_admin
+from firebase_admin import credentials, firestore
+from datetime import datetime
 
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -80,18 +81,36 @@ st.markdown("""
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
-# Google Sheets helpers
-@st.cache_resource
-def get_gsheet():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
-    client = gspread.authorize(creds)
-    sheet = client.open("Restaurant_Recommender_History").sheet1
-    return sheet
+# Initialize Firebase
+if not firebase_admin._apps:
+    cred = credentials.Certificate({
+        "type": st.secrets["firebase"]["type"],
+        "project_id": st.secrets["firebase"]["project_id"],
+        "private_key_id": st.secrets["firebase"]["private_key_id"],
+        "private_key": st.secrets["firebase"]["private_key"].replace('\\n', '\n'),
+        "client_email": st.secrets["firebase"]["client_email"],
+        "client_id": st.secrets["firebase"]["client_id"],
+        "auth_uri": st.secrets["firebase"]["auth_uri"],
+        "token_uri": st.secrets["firebase"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"]
+    })
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 def read_history():
-    sheet = get_gsheet()
-    return sheet.get_all_records()
+    try:
+        docs = db.collection("recommendations").stream()
+        history_data = []
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            history_data.append(data)
+        return history_data
+    except Exception as e:
+        st.error(f"Error reading from Firebase: {e}")
+        return []
 
 def append_history(data_dict):
     food = data_dict.get("Food", "").strip()
@@ -100,25 +119,24 @@ def append_history(data_dict):
     if not food or not location:
         return
 
-    sheet = get_gsheet()
-    existing_rows = sheet.get_all_records()
-
-    # Check for duplicate entry
-    for row in existing_rows:
-        if (row.get("Restaurant") == data_dict.get("Restaurant") and
-            row.get("Food") == food and
-            row.get("Location") == location):
+    try:
+        # Check for duplicate entry
+        docs = db.collection("recommendations").where("Restaurant", "==", data_dict.get("Restaurant")) \
+                                              .where("Food", "==", food) \
+                                              .where("Location", "==", location) \
+                                              .stream()
+        
+        if len(list(docs)) > 0:
             return
 
-    row = [
-        data_dict.get("Restaurant", ""),
-        data_dict.get("Rating", ""),
-        data_dict.get("Address", ""),
-        food,
-        location
-    ]
-    sheet.append_row(row)
-    st.success("New recommendation saved to history!")
+        # Add timestamp
+        data_dict["timestamp"] = datetime.now()
+        
+        # Add to Firestore
+        db.collection("recommendations").add(data_dict)
+        st.success("New recommendation saved to history!")
+    except Exception as e:
+        st.error(f"Error saving to Firebase: {e}")
 
 # Session state initialization
 if "page" not in st.session_state:
@@ -338,7 +356,10 @@ elif st.session_state.page == "History":
     if not history_data:
         st.info("No history available yet. Try making some recommendations first!")
     else:
+        # Convert to DataFrame for nice display
         df_hist = pd.DataFrame(history_data)
+        # Remove internal fields
+        df_hist = df_hist.drop(columns=['id', 'timestamp'], errors='ignore')
         df_hist.index += 1
         st.dataframe(df_hist, use_container_width=True)
 
@@ -350,7 +371,7 @@ elif st.session_state.page == "About":
 
     - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
     - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
-    - Google Sheets to save and track your recommendation history.
+    - Firebase Firestore to save and track your recommendation history.
 
     --- 
     _Powered by OpenAI and Streamlit._
