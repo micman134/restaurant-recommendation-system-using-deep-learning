@@ -8,9 +8,49 @@ from oauth2client.service_account import ServiceAccountCredentials
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Hide Streamlit UI and footer
-st.markdown("""
+# Add background image and custom styles
+st.markdown(
+    """
     <style>
+    .stApp {
+        background-image: url("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+    
+    /* Semi-transparent overlay */
+    .stApp:before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.85);
+        z-index: -1;
+    }
+    
+    /* Main content area */
+    .main .block-container {
+        background-color: rgba(255, 255, 255, 0.9);
+        border-radius: 10px;
+        padding: 2rem;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    /* Sidebar */
+    .stSidebar {
+        background-color: rgba(255, 255, 255, 0.95) !important;
+    }
+    
+    /* Dataframe styling */
+    .stDataFrame {
+        background-color: rgba(255, 255, 255, 0.95) !important;
+    }
+    
+    /* Hide Streamlit UI and footer */
     #MainMenu, footer, header {visibility: hidden;}
     .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
         display: none !important;
@@ -21,9 +61,39 @@ st.markdown("""
         margin-top: 50px;
         padding: 20px;
         color: #aaa;
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 10px;
+    }
+    
+    /* Input fields */
+    .stTextInput input, .stTextArea textarea {
+        background-color: rgba(255, 255, 255, 0.95) !important;
+    }
+    
+    /* Buttons */
+    .stButton button {
+        background-color: #4CAF50 !important;
+        color: white !important;
+        border: none !important;
+        padding: 10px 24px !important;
+        text-align: center !important;
+        text-decoration: none !important;
+        display: inline-block !important;
+        font-size: 16px !important;
+        margin: 4px 2px !important;
+        cursor: pointer !important;
+        border-radius: 8px !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stButton button:hover {
+        background-color: #45a049 !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2) !important;
     }
     </style>
-""", unsafe_allow_html=True)
+    """,
+    unsafe_allow_html=True
+)
 
 # Autofocus on the food input field
 st.markdown("""
@@ -66,7 +136,6 @@ def append_history(data_dict):
         if (row.get("Restaurant") == data_dict.get("Restaurant") and
             row.get("Food") == food and
             row.get("Location") == location):
-            #st.info("This recommendation is already saved in history. Skipping append.")
             return
 
     row = [
@@ -214,7 +283,7 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
-        # ======== Gallery Pick Section ========
+        # Gallery Pick Section
         st.divider()
         st.subheader("🖼️ Gallery Pick")
 
@@ -223,13 +292,6 @@ if st.session_state.page == "Recommend":
             with gallery_cols[idx % 3]:
                 if r["Image"]:
                     st.image(r["Image"], caption=f"{r['Restaurant']} — {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}", use_column_width=True)
-                else:
-                    continue
-                    #vii = r["Image"]
-                    #st.markdown(f"### {r['Restaurant']}")
-                    #st.markdown(f"{'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}")
-
-        # ================================
 
         st.divider()
         if reviewed_restaurants:
@@ -304,8 +366,6 @@ elif st.session_state.page == "About":
     - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
     - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
     - Google Sheets to save and track your recommendation history.
-
-    
 
     --- 
     _Powered by OpenAI and Streamlit._
