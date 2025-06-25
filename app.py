@@ -18,11 +18,11 @@ st.markdown(
         background-position: center;
         background-repeat: no-repeat;
         background-attachment: fixed;
-        position: relative;
     }
     
+  
     /* Dark overlay */
-    .stApp::before {
+    .stApp:before {
         content: "";
         position: absolute;
         top: 0;
@@ -33,23 +33,6 @@ st.markdown(
         z-index: 0;
     }
     
-    /* Content stays above overlay */
-    .stApp > div {
-        position: relative;
-        z-index: 1;
-    }
-    
-    /* Gallery image styling */
-    .gallery-image {
-        height: 200px;
-        width: 100%;
-        object-fit: cover;
-        border-radius: 10px;
-        margin-bottom: 10px;
-    }
-    .gallery-item {
-        margin-bottom: 20px;
-    }
     
     /* Keep all your existing styles below */
     #MainMenu, footer, header {visibility: hidden;}
@@ -109,6 +92,7 @@ def append_history(data_dict):
         if (row.get("Restaurant") == data_dict.get("Restaurant") and
             row.get("Food") == food and
             row.get("Location") == location):
+            #st.info("This recommendation is already saved in history. Skipping append.")
             return
 
     row = [
@@ -127,7 +111,7 @@ if "page" not in st.session_state:
 
 # Sidebar navigation
 with st.sidebar:
-    st.markdown("## �️ Menu")
+    st.markdown("## 🍽️ Menu")
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
@@ -256,31 +240,20 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
-        # ======== Improved Gallery Pick Section ========
+        # ======== Gallery Pick Section ========
         st.divider()
         st.subheader("🖼️ Gallery Pick")
 
-        # Filter restaurants with images only
-        restaurants_with_images = [r for r in st.session_state.results if r["Image"]]
-        
-        if restaurants_with_images:
-            # Create 3 columns
-            gallery_cols = st.columns(3)
-            
-            # Display images in the gallery
-            for idx, r in enumerate(restaurants_with_images):
-                with gallery_cols[idx % 3]:
-                    st.markdown(f"""
-                    <div class="gallery-item">
-                        <img src="{r['Image']}" class="gallery-image" alt="{r['Restaurant']}">
-                        <div style="text-align: center;">
-                            <strong>{r['Restaurant']}</strong><br>
-                            {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("No restaurant images available to display in the gallery.")
+        gallery_cols = st.columns(3)
+        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
+            with gallery_cols[idx % 3]:
+                if r["Image"]:
+                    st.image(r["Image"], caption=f"{r['Restaurant']} — {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}", use_column_width=True)
+                else:
+                    continue
+                    #vii = r["Image"]
+                    #st.markdown(f"### {r['Restaurant']}")
+                    #st.markdown(f"{'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}")
 
         # ================================
 
@@ -357,6 +330,8 @@ elif st.session_state.page == "About":
     - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
     - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
     - Google Sheets to save and track your recommendation history.
+
+    
 
     --- 
     _Powered by OpenAI and Streamlit._
