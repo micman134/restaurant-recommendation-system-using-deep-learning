@@ -30,7 +30,7 @@ st.markdown(
         right: 0;
         bottom: 0;
         background: rgba(0, 0, 0, 0.75);
-        z-index: -1;
+        z-index: 0;
     }
     
     
