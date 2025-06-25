@@ -20,6 +20,7 @@ st.markdown(
         background-attachment: fixed;
     }
     
+  
     /* Dark overlay */
     .stApp:before {
         content: "";
@@ -28,9 +29,10 @@ st.markdown(
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.7);
+        background: rgba(0, 0, 0, 0.75);
         z-index: -1;
     }
+    
     
     /* Keep all your existing styles below */
     #MainMenu, footer, header {visibility: hidden;}
