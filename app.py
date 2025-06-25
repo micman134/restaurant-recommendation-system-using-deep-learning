@@ -21,17 +21,7 @@ st.markdown(
     }
     
     /* Semi-transparent overlay */
-    .stApp:before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: red;
-        z-index: -1;
-    }
-    
+ 
     /* Main content area */
     .main .block-container {
         background-color: rgba(255, 255, 255, 0.9);
