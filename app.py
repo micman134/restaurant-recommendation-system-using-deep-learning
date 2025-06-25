@@ -126,7 +126,7 @@ if "page" not in st.session_state:
 
 # Sidebar navigation
 with st.sidebar:
-    st.markdown("## �️ Menu")
+    st.markdown("## 🍽️ Menu")
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
