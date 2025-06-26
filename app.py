@@ -9,7 +9,7 @@ from datetime import datetime
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Add background image and dark overlay
+# Add background image and dark overlay with table height adjustments
 st.markdown(
     """
     <style>
@@ -31,6 +31,26 @@ st.markdown(
         bottom: 0;
         background: rgba(0, 0, 0, 0.85);
         z-index: 0;
+    }
+    
+    /* Table height adjustments */
+    .stDataFrame {
+        height: 100%;
+    }
+    .stDataFrame .data {
+        max-height: none !important;
+    }
+    .stDataFrame .data .row {
+        height: 60px !important;
+        min-height: 60px !important;
+    }
+    .stDataFrame .data .cell {
+        padding: 15px 8px !important;
+    }
+    /* For the history table specifically */
+    #history-table .row {
+        height: 80px !important;
+        min-height: 80px !important;
     }
     
     /* Keep all your existing styles below */
@@ -247,7 +267,7 @@ if st.session_state.page == "Recommend":
     if st.session_state.results:
         st.divider()
         st.subheader("📊 Restaurants Search Results and Ratings")
-        st.dataframe(st.session_state.df, use_container_width=True)
+        st.dataframe(st.session_state.df, use_container_width=True, height=600)
 
         # Filter out restaurants with zero reviews for top picks
         reviewed_restaurants = [r for r in st.session_state.results if r["Reviews"] > 0]
@@ -361,7 +381,7 @@ elif st.session_state.page == "History":
         # Remove internal fields
         df_hist = df_hist.drop(columns=['id', 'timestamp'], errors='ignore')
         df_hist.index += 1
-        st.dataframe(df_hist, use_container_width=True)
+        st.dataframe(df_hist, use_container_width=True, height=800)
 
 # -------- PAGE: About --------
 elif st.session_state.page == "About":
