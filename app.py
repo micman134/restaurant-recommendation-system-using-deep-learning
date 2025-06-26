@@ -33,7 +33,7 @@ def search_yelp_business(food, location, limit=10):
     }
     params = {
         "location": location,
-        "term": food,
+        "query": food,   # Note: this must be 'query' for RapidAPI Yelp
         "limit": limit
     }
     res = requests.get(url, headers=headers, params=params)
