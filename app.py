@@ -3,11 +3,12 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
+# Sentiment classifier cached for speed
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
-# Foursquare API calls
+# Foursquare API search
 def search_foursquare(food, location, api_key, limit=10):
     headers = {"accept": "application/json", "Authorization": api_key}
     params = {"query": food, "near": location, "limit": limit}
@@ -16,6 +17,7 @@ def search_foursquare(food, location, api_key, limit=10):
         return res.json().get("results", [])
     return []
 
+# Foursquare tips fetch
 def get_foursquare_tips(fsq_id, api_key):
     url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
     headers = {"accept": "application/json", "Authorization": api_key}
@@ -24,7 +26,7 @@ def get_foursquare_tips(fsq_id, api_key):
         return [t["text"] for t in res.json()[:5]]
     return []
 
-# Yelp API calls
+# Yelp business search via RapidAPI
 def search_yelp_business(food, location, limit=10):
     url = "https://yelp-business-reviews.p.rapidapi.com/search"
     headers = {
@@ -35,8 +37,11 @@ def search_yelp_business(food, location, limit=10):
     res = requests.get(url, headers=headers, params=params)
     if res.status_code == 200:
         return res.json().get("businesses", [])[:limit]
+    else:
+        st.warning(f"Yelp search failed: {res.status_code}")
     return []
 
+# Yelp reviews fetch by business ID via RapidAPI
 def get_yelp_reviews_by_id(business_id):
     url = f"https://yelp-business-reviews.p.rapidapi.com/reviews/{business_id}"
     headers = {
@@ -46,21 +51,11 @@ def get_yelp_reviews_by_id(business_id):
     res = requests.get(url, headers=headers)
     if res.status_code == 200:
         return [r["text"] for r in res.json().get("reviews", []) if "text" in r]
-    return []
-
-def get_yelp_reviews(food, location, business_id=None):
-    if business_id:
-        return get_yelp_reviews_by_id(business_id)
     else:
-        businesses = search_yelp_business(food, location)
-        reviews = []
-        for biz in businesses[:1]:
-            reviews += [r["text"] for r in biz.get("reviews", [])]
-            if not reviews:
-                reviews += get_yelp_reviews_by_id(biz["id"])
-        return reviews
+        st.warning(f"Failed to get Yelp reviews for business id {business_id}: {res.status_code}")
+        return []
 
-# Streamlit UI
+# Streamlit UI setup
 st.set_page_config(page_title="Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender (Foursquare + Yelp)")
 
@@ -82,14 +77,13 @@ if st.button("🔍 Search"):
 
         # Process Foursquare restaurants
         for r in fsq_restaurants:
-            name = r["name"]
-            fsq_id = r["fsq_id"]
+            name = r.get("name", "Unknown")
+            fsq_id = r.get("fsq_id")
             address = r.get("location", {}).get("formatted_address", "Unknown")
 
             fsq_reviews = get_foursquare_tips(fsq_id, fsq_api_key)
-            yelp_reviews = []  # We don't do Yelp reviews here to avoid duplicates
-
-            all_reviews = fsq_reviews + yelp_reviews
+            # No Yelp reviews to avoid duplicates
+            all_reviews = fsq_reviews
 
             sentiments = []
             for review in all_reviews[:5]:
@@ -117,10 +111,8 @@ if st.button("🔍 Search"):
             address = ", ".join(r.get("location", {}).get("display_address", []))
             biz_id = r.get("id")
 
-            yelp_reviews = get_yelp_reviews(food, location, business_id=biz_id)
-            fsq_reviews = []  # No Foursquare tips here
-
-            all_reviews = yelp_reviews + fsq_reviews
+            yelp_reviews = get_yelp_reviews_by_id(biz_id)
+            all_reviews = yelp_reviews
 
             sentiments = []
             for review in all_reviews[:5]:
@@ -142,7 +134,7 @@ if st.button("🔍 Search"):
                 "Top Reviews": all_reviews[:2] if all_reviews else ["No reviews"]
             })
 
-        # Sort combined by rating descending, limit 20
+        # Sort combined list by rating descending and limit to 20
         combined_results = sorted(combined_results, key=lambda x: x["Rating"], reverse=True)[:20]
 
         if combined_results:
@@ -157,7 +149,7 @@ if st.button("🔍 Search"):
             st.subheader("📊 Combined Results (Foursquare + Yelp)")
             st.dataframe(df, use_container_width=True)
 
-            st.subheader("📝 Reviews")
+            st.subheader("📝 Sample Reviews")
             for r in combined_results:
                 st.markdown(f"### {r['Restaurant']} ({r['Rating']}⭐) — Source: {r['Source']}")
                 st.markdown(f"📍 {r['Address']}")
