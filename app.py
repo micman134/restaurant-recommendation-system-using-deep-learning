@@ -2,10 +2,18 @@ import streamlit as st
 import requests
 import pandas as pd
 from transformers import pipeline
+import http.client
+import json
 
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
+
+def sanitize_location(loc):
+    loc = loc.strip()
+    if not loc:
+        return "New York, NY"  # fallback default location for Yelp
+    return loc
 
 def search_foursquare(food, location, api_key, limit=10):
     headers = {"accept": "application/json", "Authorization": api_key}
@@ -25,35 +33,37 @@ def get_foursquare_tips(fsq_id, api_key):
         return [t["text"] for t in res.json()[:5]]
     return []
 
-def search_yelp_business(food, location, limit=10):
-    url = "https://yelp-business-reviews.p.rapidapi.com/search"
+def search_yelp_business_httpclient(food, location, limit=10):
+    location = sanitize_location(location)
+    conn = http.client.HTTPSConnection("yelp-business-reviews.p.rapidapi.com")
     headers = {
-        "x-rapidapi-key": st.secrets["RAPIDAPI_YELP"]["key"],
-        "x-rapidapi-host": st.secrets["RAPIDAPI_YELP"]["host"]
+        'x-rapidapi-key': st.secrets["RAPIDAPI_YELP"]["key"],
+        'x-rapidapi-host': st.secrets["RAPIDAPI_YELP"]["host"]
     }
-    params = {
-        "location": location,
-        "query": food,   # Note: this must be 'query' for RapidAPI Yelp
-        "limit": limit
-    }
-    res = requests.get(url, headers=headers, params=params)
-    if res.status_code == 200:
-        return res.json().get("businesses", [])[:limit]
+    path = f"/search?location={location.replace(' ', '%20')}&query={food.replace(' ', '%20')}&limit={limit}"
+    conn.request("GET", path, headers=headers)
+    res = conn.getresponse()
+    data = res.read()
+    if res.status == 200:
+        return json.loads(data).get("businesses", [])[:limit]
     else:
-        st.warning(f"Yelp search failed: {res.status_code} - {res.text}")
+        st.warning(f"Yelp search failed: {res.status} - {data.decode('utf-8')}")
         return []
 
-def get_yelp_reviews_by_id(business_id):
-    url = f"https://yelp-business-reviews.p.rapidapi.com/reviews/{business_id}"
+def get_yelp_reviews_by_id_httpclient(business_id):
+    conn = http.client.HTTPSConnection("yelp-business-reviews.p.rapidapi.com")
     headers = {
-        "x-rapidapi-key": st.secrets["RAPIDAPI_YELP"]["key"],
-        "x-rapidapi-host": st.secrets["RAPIDAPI_YELP"]["host"]
+        'x-rapidapi-key': st.secrets["RAPIDAPI_YELP"]["key"],
+        'x-rapidapi-host': st.secrets["RAPIDAPI_YELP"]["host"]
     }
-    res = requests.get(url, headers=headers)
-    if res.status_code == 200:
-        return [r["text"] for r in res.json().get("reviews", []) if "text" in r]
+    path = f"/reviews/{business_id}"
+    conn.request("GET", path, headers=headers)
+    res = conn.getresponse()
+    data = res.read()
+    if res.status == 200:
+        return [r["text"] for r in json.loads(data).get("reviews", []) if "text" in r]
     else:
-        st.warning(f"Failed to get Yelp reviews for business id {business_id}: {res.status_code}")
+        st.warning(f"Failed to get Yelp reviews for business id {business_id}: {res.status}")
         return []
 
 st.set_page_config(page_title="Restaurant Recommender", layout="wide")
@@ -70,7 +80,7 @@ if st.button("🔍 Search"):
         fsq_api_key = st.secrets["FOURSQUARE_API_KEY"]
 
         fsq_restaurants = search_foursquare(food, location, fsq_api_key, limit=10)
-        yelp_restaurants = search_yelp_business(food, location, limit=10)
+        yelp_restaurants = search_yelp_business_httpclient(food, location, limit=10)
 
         combined_results = []
 
@@ -107,7 +117,7 @@ if st.button("🔍 Search"):
             address = ", ".join(r.get("location", {}).get("display_address", []))
             biz_id = r.get("id")
 
-            yelp_reviews = get_yelp_reviews_by_id(biz_id)
+            yelp_reviews = get_yelp_reviews_by_id_httpclient(biz_id)
             all_reviews = yelp_reviews
 
             sentiments = []
