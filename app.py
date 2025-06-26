@@ -3,21 +3,20 @@ import requests
 import pandas as pd
 from transformers import pipeline
 
-# Sentiment classifier cached for speed
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
-# Foursquare API search
 def search_foursquare(food, location, api_key, limit=10):
     headers = {"accept": "application/json", "Authorization": api_key}
     params = {"query": food, "near": location, "limit": limit}
     res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
     if res.status_code == 200:
         return res.json().get("results", [])
+    else:
+        st.warning(f"Foursquare search failed: {res.status_code} - {res.text}")
     return []
 
-# Foursquare tips fetch
 def get_foursquare_tips(fsq_id, api_key):
     url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
     headers = {"accept": "application/json", "Authorization": api_key}
@@ -26,22 +25,24 @@ def get_foursquare_tips(fsq_id, api_key):
         return [t["text"] for t in res.json()[:5]]
     return []
 
-# Yelp business search via RapidAPI
 def search_yelp_business(food, location, limit=10):
     url = "https://yelp-business-reviews.p.rapidapi.com/search"
     headers = {
         "x-rapidapi-key": st.secrets["RAPIDAPI_YELP"]["key"],
         "x-rapidapi-host": st.secrets["RAPIDAPI_YELP"]["host"]
     }
-    params = {"location": location, "query": food}
+    params = {
+        "location": location,
+        "term": food,
+        "limit": limit
+    }
     res = requests.get(url, headers=headers, params=params)
     if res.status_code == 200:
         return res.json().get("businesses", [])[:limit]
     else:
-        st.warning(f"Yelp search failed: {res.status_code}")
-    return []
+        st.warning(f"Yelp search failed: {res.status_code} - {res.text}")
+        return []
 
-# Yelp reviews fetch by business ID via RapidAPI
 def get_yelp_reviews_by_id(business_id):
     url = f"https://yelp-business-reviews.p.rapidapi.com/reviews/{business_id}"
     headers = {
@@ -55,7 +56,6 @@ def get_yelp_reviews_by_id(business_id):
         st.warning(f"Failed to get Yelp reviews for business id {business_id}: {res.status_code}")
         return []
 
-# Streamlit UI setup
 st.set_page_config(page_title="Restaurant Recommender", layout="wide")
 st.title("🍽️ AI Restaurant Recommender (Foursquare + Yelp)")
 
@@ -69,20 +69,17 @@ if st.button("🔍 Search"):
         classifier = get_classifier()
         fsq_api_key = st.secrets["FOURSQUARE_API_KEY"]
 
-        # Fetch restaurants from both sources
         fsq_restaurants = search_foursquare(food, location, fsq_api_key, limit=10)
         yelp_restaurants = search_yelp_business(food, location, limit=10)
 
         combined_results = []
 
-        # Process Foursquare restaurants
         for r in fsq_restaurants:
             name = r.get("name", "Unknown")
             fsq_id = r.get("fsq_id")
             address = r.get("location", {}).get("formatted_address", "Unknown")
 
             fsq_reviews = get_foursquare_tips(fsq_id, fsq_api_key)
-            # No Yelp reviews to avoid duplicates
             all_reviews = fsq_reviews
 
             sentiments = []
@@ -105,7 +102,6 @@ if st.button("🔍 Search"):
                 "Top Reviews": all_reviews[:2] if all_reviews else ["No reviews"]
             })
 
-        # Process Yelp restaurants
         for r in yelp_restaurants:
             name = r.get("name", "Unknown")
             address = ", ".join(r.get("location", {}).get("display_address", []))
@@ -134,7 +130,6 @@ if st.button("🔍 Search"):
                 "Top Reviews": all_reviews[:2] if all_reviews else ["No reviews"]
             })
 
-        # Sort combined list by rating descending and limit to 20
         combined_results = sorted(combined_results, key=lambda x: x["Rating"], reverse=True)[:20]
 
         if combined_results:
