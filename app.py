@@ -4,16 +4,20 @@ import pandas as pd
 from transformers import pipeline
 import http.client
 import json
+import urllib.parse
 
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
-def sanitize_location(loc):
+def sanitize_and_encode_location(loc):
     loc = loc.strip()
     if not loc:
-        return "New York, NY"  # fallback default location for Yelp
-    return loc
+        loc = "New York, NY"  # fallback default location
+    return urllib.parse.quote_plus(loc)
+
+def sanitize_and_encode_text(text):
+    return urllib.parse.quote_plus(text.strip())
 
 def search_foursquare(food, location, api_key, limit=10):
     headers = {"accept": "application/json", "Authorization": api_key}
@@ -34,13 +38,15 @@ def get_foursquare_tips(fsq_id, api_key):
     return []
 
 def search_yelp_business_httpclient(food, location, limit=10):
-    location = sanitize_location(location)
+    location_encoded = sanitize_and_encode_location(location)
+    food_encoded = sanitize_and_encode_text(food)
+
     conn = http.client.HTTPSConnection("yelp-business-reviews.p.rapidapi.com")
     headers = {
         'x-rapidapi-key': st.secrets["RAPIDAPI_YELP"]["key"],
         'x-rapidapi-host': st.secrets["RAPIDAPI_YELP"]["host"]
     }
-    path = f"/search?location={location.replace(' ', '%20')}&query={food.replace(' ', '%20')}&limit={limit}"
+    path = f"/search?location={location_encoded}&query={food_encoded}&limit={limit}"
     conn.request("GET", path, headers=headers)
     res = conn.getresponse()
     data = res.read()
