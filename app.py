@@ -6,6 +6,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
 import urllib.parse
+import geocoder
 
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -74,6 +75,12 @@ st.markdown(
     .map-link:hover {
         text-decoration: underline;
     }
+    
+    /* Location detection button styling */
+    .location-button {
+        margin-top: 10px;
+        width: 100%;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -86,6 +93,25 @@ st.markdown("""
     if (foodInput) { foodInput.focus(); }
     </script>
 """, unsafe_allow_html=True)
+
+def get_current_location():
+    """Get current location using geocoder"""
+    try:
+        g = geocoder.ip('me')
+        if g.ok:
+            # Try to get city, state, country information
+            address = []
+            if g.city:
+                address.append(g.city)
+            if g.state:
+                address.append(g.state)
+            if g.country:
+                address.append(g.country)
+            return ", ".join(address) if address else g.address
+        return None
+    except Exception as e:
+        st.error(f"Error detecting location: {e}")
+        return None
 
 # Load sentiment analysis model
 @st.cache_resource(show_spinner=False)
@@ -149,33 +175,11 @@ def append_history(data_dict):
     except Exception as e:
         st.error(f"Error saving to Firebase: {e}")
 
-def get_current_location():
-    """Attempt to get user's current location using browser geolocation API"""
-    try:
-        # JavaScript to get current location
-        location_js = """
-        <script>
-        navigator.geolocation.getCurrentPosition(
-            function(position) {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                window.parent.document.querySelector('input[type="text"]').value = `${lat},${lng}`;
-            },
-            function(error) {
-                console.error("Error getting location:", error);
-            }
-        );
-        </script>
-        """
-        st.components.v1.html(location_js, height=0)
-        return True
-    except Exception as e:
-        st.error(f"Error getting location: {e}")
-        return False
-
 # Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
+if "location" not in st.session_state:
+    st.session_state.location = ""
 
 # Sidebar navigation
 with st.sidebar:
@@ -198,28 +202,31 @@ if st.session_state.page == "Recommend":
         st.session_state.results = None
         st.session_state.df = None
 
-    col1, col2 = st.columns([1, 1])
+    col1, _ = st.columns([1, 1])
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
-    col1, col2 = st.columns([1, 1])
+    col1, col2 = st.columns([3, 1])
     with col1:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria or click 'Use Current Location'")
+        location = st.text_input("📍 Location", 
+                               placeholder="e.g., Lagos, Nigeria",
+                               value=st.session_state.location,
+                               key="location_input")
     with col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("📍 Use Current Location"):
-            if get_current_location():
-                st.success("Location detected! Click Search to find restaurants near you.")
-            else:
-                st.error("Could not detect location. Please enable location services or enter manually.")
+        if st.button("📍 Detect My Location", key="detect_location"):
+            with st.spinner("Detecting your location..."):
+                detected_location = get_current_location()
+                if detected_location:
+                    st.session_state.location = detected_location
+                    st.rerun()
+                else:
+                    st.error("Could not detect your location automatically. Please enter it manually.")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
     if st.button("🔍 Search"):
-        if not food:
-            st.warning("⚠️ Please enter a food type.")
-        elif not location:
-            st.warning("⚠️ Please enter a location or use current location.")
+        if not food or not st.session_state.location:
+            st.warning("⚠️ Please enter both a food type and location.")
         elif not api_key:
             st.error("❌ Foursquare API key is missing.")
         else:
@@ -228,14 +235,7 @@ if st.session_state.page == "Recommend":
 
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
-                
-                # Check if location is in lat,lng format (from geolocation)
-                if "," in location and all(part.strip().replace(".", "").replace("-", "").isdigit() for part in location.split(",")):
-                    lat, lng = location.split(",")
-                    params = {"query": food, "ll": f"{lat.strip()},{lng.strip()}", "limit": 20}
-                else:
-                    params = {"query": food, "near": location, "limit": 20}
-                
+                params = {"query": food, "near": st.session_state.location, "limit": 20}
                 res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
                 restaurants = res.json().get("results", [])
 
@@ -367,7 +367,7 @@ if st.session_state.page == "Recommend":
                 "Address": top["Address"],
                 "Google Maps Link": top["Google Maps Link"],
                 "Food": food,
-                "Location": location
+                "Location": st.session_state.location
             }
             append_history(top_pick)
         else:
