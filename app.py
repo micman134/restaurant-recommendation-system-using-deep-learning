@@ -149,6 +149,30 @@ def append_history(data_dict):
     except Exception as e:
         st.error(f"Error saving to Firebase: {e}")
 
+def get_current_location():
+    """Attempt to get user's current location using browser geolocation API"""
+    try:
+        # JavaScript to get current location
+        location_js = """
+        <script>
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                window.parent.document.querySelector('input[type="text"]').value = `${lat},${lng}`;
+            },
+            function(error) {
+                console.error("Error getting location:", error);
+            }
+        );
+        </script>
+        """
+        st.components.v1.html(location_js, height=0)
+        return True
+    except Exception as e:
+        st.error(f"Error getting location: {e}")
+        return False
+
 # Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
@@ -174,19 +198,28 @@ if st.session_state.page == "Recommend":
         st.session_state.results = None
         st.session_state.df = None
 
-    col1, _ = st.columns([1, 1])
+    col1, col2 = st.columns([1, 1])
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
-    col1, _ = st.columns([1, 1])
+    col1, col2 = st.columns([1, 1])
     with col1:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria or click 'Use Current Location'")
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("📍 Use Current Location"):
+            if get_current_location():
+                st.success("Location detected! Click Search to find restaurants near you.")
+            else:
+                st.error("Could not detect location. Please enable location services or enter manually.")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
     if st.button("🔍 Search"):
-        if not food or not location:
-            st.warning("⚠️ Please enter both a food type and location.")
+        if not food:
+            st.warning("⚠️ Please enter a food type.")
+        elif not location:
+            st.warning("⚠️ Please enter a location or use current location.")
         elif not api_key:
             st.error("❌ Foursquare API key is missing.")
         else:
@@ -195,7 +228,14 @@ if st.session_state.page == "Recommend":
 
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
-                params = {"query": food, "near": location, "limit": 20}
+                
+                # Check if location is in lat,lng format (from geolocation)
+                if "," in location and all(part.strip().replace(".", "").replace("-", "").isdigit() for part in location.split(",")):
+                    lat, lng = location.split(",")
+                    params = {"query": food, "ll": f"{lat.strip()},{lng.strip()}", "limit": 20}
+                else:
+                    params = {"query": food, "near": location, "limit": 20}
+                
                 res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
                 restaurants = res.json().get("results", [])
 
