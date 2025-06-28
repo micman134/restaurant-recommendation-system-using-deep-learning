@@ -9,3 +9,4 @@ matplotlib>=3.4.0
 gspread
 oauth2client
 firebase-admin
+geopy
