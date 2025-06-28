@@ -6,6 +6,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
 import urllib.parse
+import geocoder
+from geopy.geocoders import Nominatim
+import time
 
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -74,18 +77,143 @@ st.markdown(
     .map-link:hover {
         text-decoration: underline;
     }
+    
+    /* Location detection button styling */
+    .location-button {
+        margin-top: 10px;
+        width: 100%;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# Autofocus on the food input field
+# JavaScript for browser geolocation
 st.markdown("""
-    <script>
-    const foodInput = window.parent.document.querySelectorAll('input[type="text"]')[0];
-    if (foodInput) { foodInput.focus(); }
-    </script>
+<script>
+// Store the Streamlit component instance
+const geolocationListener = (window.geolocationListener = function(data) {
+    if (data.type === 'geolocation') {
+        if (data.error) {
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: 'streamlit:component_event',
+                componentEventType: 'geolocationError',
+                error: data.error
+            }, '*');
+        } else if (data.coords) {
+            window.parent.postMessage({
+                isStreamlitMessage: true,
+                type: 'streamlit:component_event',
+                componentEventType: 'geolocationSuccess',
+                latitude: data.coords.latitude,
+                longitude: data.coords.longitude
+            }, '*');
+        }
+    }
+});
+
+function getLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            (position) => geolocationListener({
+                type: 'geolocation',
+                coords: {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude
+                }
+            }),
+            (error) => geolocationListener({
+                type: 'geolocation',
+                error: error.message
+            })
+        );
+    } else {
+        geolocationListener({
+            type: 'geolocation',
+            error: "Geolocation is not supported by this browser."
+        });
+    }
+}
+
+// Start the process when the page loads
+document.addEventListener('DOMContentLoaded', getLocation);
+</script>
 """, unsafe_allow_html=True)
+
+def reverse_geocode(lat, lon):
+    """Convert coordinates to address using Nominatim"""
+    try:
+        geolocator = Nominatim(user_agent="restaurant_recommender")
+        location = geolocator.reverse(f"{lat}, {lon}", exactly_one=True)
+        if location:
+            address = location.raw.get('address', {})
+            components = []
+            if address.get('city'):
+                components.append(address['city'])
+            elif address.get('town'):
+                components.append(address['town'])
+            elif address.get('village'):
+                components.append(address['village'])
+            
+            if address.get('state'):
+                components.append(address['state'])
+            
+            if address.get('country'):
+                components.append(address['country'])
+            
+            return ", ".join(components) if components else None
+    except Exception as e:
+        st.error(f"Geocoding error: {str(e)}")
+    return None
+
+def get_current_location():
+    """Get current location using multiple methods with fallbacks"""
+    # Check if we have coordinates from browser geolocation
+    if 'geolocation' in st.session_state:
+        if st.session_state.geolocation.get('coords'):
+            lat = st.session_state.geolocation['coords']['latitude']
+            lon = st.session_state.geolocation['coords']['longitude']
+            address = reverse_geocode(lat, lon)
+            if address:
+                return address
+    
+    # Fallback to IP-based geolocation
+    services = ['ipinfo', 'freegeoip', 'geocodexyz']
+    for service in services:
+        try:
+            g = geocoder.ip('me', provider=service)
+            if g.ok:
+                components = []
+                if g.city:
+                    components.append(g.city)
+                if g.state:
+                    components.append(g.state)
+                if g.country:
+                    components.append(g.country)
+                if components:
+                    return ", ".join(components)
+            time.sleep(0.5)  # Rate limiting
+        except Exception:
+            continue
+    
+    return None
+
+# Initialize session state for geolocation
+if 'geolocation' not in st.session_state:
+    st.session_state.geolocation = {}
+
+# Handle geolocation events from JavaScript
+def handle_geolocation_event(event):
+    if event.type == 'geolocationSuccess':
+        st.session_state.geolocation = {
+            'coords': {
+                'latitude': event.latitude,
+                'longitude': event.longitude
+            }
+        }
+    elif event.type == 'geolocationError':
+        st.session_state.geolocation = {'error': event.error}
 
 # Load sentiment analysis model
 @st.cache_resource(show_spinner=False)
@@ -152,6 +280,8 @@ def append_history(data_dict):
 # Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
+if "location" not in st.session_state:
+    st.session_state.location = ""
 
 # Sidebar navigation
 with st.sidebar:
@@ -178,14 +308,26 @@ if st.session_state.page == "Recommend":
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
-    col1, _ = st.columns([1, 1])
+    col1, col2 = st.columns([3, 1])
     with col1:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+        location = st.text_input("📍 Location", 
+                               placeholder="e.g., Lagos, Nigeria",
+                               value=st.session_state.location,
+                               key="location_input")
+    with col2:
+        if st.button("📍 Detect My Location", key="detect_location"):
+            with st.spinner("Detecting your location (please allow browser permissions if prompted)..."):
+                detected_location = get_current_location()
+                if detected_location:
+                    st.session_state.location = detected_location
+                    st.rerun()
+                else:
+                    st.error("Could not detect your location. Please enter it manually.")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
     if st.button("🔍 Search"):
-        if not food or not location:
+        if not food or not st.session_state.location:
             st.warning("⚠️ Please enter both a food type and location.")
         elif not api_key:
             st.error("❌ Foursquare API key is missing.")
@@ -195,7 +337,7 @@ if st.session_state.page == "Recommend":
 
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
-                params = {"query": food, "near": location, "limit": 20}
+                params = {"query": food, "near": st.session_state.location, "limit": 20}
                 res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
                 restaurants = res.json().get("results", [])
 
@@ -327,7 +469,7 @@ if st.session_state.page == "Recommend":
                 "Address": top["Address"],
                 "Google Maps Link": top["Google Maps Link"],
                 "Food": food,
-                "Location": location
+                "Location": st.session_state.location
             }
             append_history(top_pick)
         else:
