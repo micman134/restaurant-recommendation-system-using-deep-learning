@@ -5,6 +5,7 @@ from transformers import pipeline
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
+import urllib.parse
 
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -62,6 +63,16 @@ st.markdown(
     .gallery-caption {
         text-align: center;
         margin-top: 5px;
+    }
+    
+    /* Map link styling */
+    .map-link {
+        color: #4CAF50 !important;
+        text-decoration: none;
+        font-weight: bold;
+    }
+    .map-link:hover {
+        text-decoration: underline;
     }
     </style>
     """,
@@ -198,6 +209,10 @@ if st.session_state.page == "Recommend":
                         fsq_id = r['fsq_id']
                         name = r['name']
                         address = r['location'].get('formatted_address', 'Unknown')
+                        
+                        # Create Google Maps link
+                        maps_query = urllib.parse.quote_plus(f"{name}, {address}")
+                        maps_link = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
 
                         tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                         tips_res = requests.get(tips_url, headers=headers)
@@ -223,6 +238,7 @@ if st.session_state.page == "Recommend":
                         results.append({
                             "Restaurant": name,
                             "Address": address,
+                            "Google Maps Link": maps_link,
                             "Rating": avg_rating,
                             "Stars": "⭐" * int(round(avg_rating)) if avg_rating > 0 else "No reviews",
                             "Reviews": len(sentiments),
@@ -234,6 +250,7 @@ if st.session_state.page == "Recommend":
                         df = pd.DataFrame([{
                             "Restaurant": r["Restaurant"],
                             "Address": r["Address"],
+                            "Map": f"[📍 View on Map]({r['Google Maps Link']})",
                             "Average Rating": r["Rating"],
                             "Stars": r["Stars"],
                             "Reviews": r["Reviews"]
@@ -270,6 +287,9 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
                             <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
+                            <div style="margin-top: 10px;">
+                                <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
+                            </div>
                         </div>
                     """, unsafe_allow_html=True)
 
@@ -291,7 +311,8 @@ if st.session_state.page == "Recommend":
                     </div>
                     <div class="gallery-caption">
                         <strong>{r['Restaurant']}</strong><br>
-                        {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}
+                        {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
+                        <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
                     </div>
                 """, unsafe_allow_html=True)
         # ================================
@@ -305,6 +326,7 @@ if st.session_state.page == "Recommend":
                 "Restaurant": top["Restaurant"],
                 "Rating": top["Rating"],
                 "Address": top["Address"],
+                "Google Maps Link": top["Google Maps Link"],
                 "Food": food,
                 "Location": location
             }
@@ -320,6 +342,7 @@ if st.session_state.page == "Recommend":
             with cols[idx % 2]:
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
+                st.markdown(f"[View on Map]({r['Google Maps Link']})", unsafe_allow_html=True)
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
                 if r["Image"]:
                     st.markdown(f"""
@@ -360,6 +383,11 @@ elif st.session_state.page == "History":
         df_hist = pd.DataFrame(history_data)
         # Remove internal fields
         df_hist = df_hist.drop(columns=['id', 'timestamp'], errors='ignore')
+        
+        # Add map links if they exist in the data
+        if 'Google Maps Link' in df_hist.columns:
+            df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
+        
         df_hist.index += 1
         st.dataframe(df_hist, use_container_width=True)
 
@@ -372,6 +400,7 @@ elif st.session_state.page == "About":
     - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
     - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
     - Firebase Firestore to save and track your recommendation history.
+    - Google Maps integration for easy navigation to recommended restaurants.
 
     --- 
     _Powered by OpenAI and Streamlit._
