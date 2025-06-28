@@ -250,7 +250,6 @@ if st.session_state.page == "Recommend":
                         df = pd.DataFrame([{
                             "Restaurant": r["Restaurant"],
                             "Address": r["Address"],
-                            "Map": f"[📍 View on Map]({r['Google Maps Link']})",
                             "Average Rating": r["Rating"],
                             "Stars": r["Stars"],
                             "Reviews": r["Reviews"]
