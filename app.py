@@ -341,7 +341,7 @@ if st.session_state.page == "Recommend":
             with cols[idx % 2]:
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"[View on Map]({r['Google Maps Link']})", unsafe_allow_html=True)
+                st.markdown(f"[locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
                 if r["Image"]:
                     st.markdown(f"""
