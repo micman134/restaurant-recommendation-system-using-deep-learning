@@ -74,12 +74,6 @@ st.markdown(
     .map-link:hover {
         text-decoration: underline;
     }
-    
-    /* Location button styling */
-    .locate-me-btn {
-        height: 48px;
-        margin-top: 25px;
-    }
     </style>
     """,
     unsafe_allow_html=True
@@ -88,7 +82,7 @@ st.markdown(
 # Autofocus on the food input field
 st.markdown("""
     <script>
-    const foodInput = window.parent.document.querySelector('input[type="text"]')[0];
+    const foodInput = window.parent.document.querySelectorAll('input[type="text"]')[0];
     if (foodInput) { foodInput.focus(); }
     </script>
 """, unsafe_allow_html=True)
@@ -184,54 +178,9 @@ if st.session_state.page == "Recommend":
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
-    col1, col2 = st.columns([3, 1])
+    col1, _ = st.columns([1, 1])
     with col1:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria", key="location_input")
-    with col2:
-        if st.button("📡 Locate Me", key="locate_me"):
-            st.markdown("""
-            <script>
-            navigator.geolocation.getCurrentPosition(
-                async (pos) => {
-                    const lat = pos.coords.latitude;
-                    const lon = pos.coords.longitude;
-
-                    // Reverse geocode with OpenStreetMap Nominatim
-                    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
-                    const data = await response.json();
-                    
-                    // Extract city/town/village, state, and country
-                    let addressParts = [];
-                    if (data.address.city) addressParts.push(data.address.city);
-                    else if (data.address.town) addressParts.push(data.address.town);
-                    else if (data.address.village) addressParts.push(data.address.village);
-                    
-                    if (data.address.state) addressParts.push(data.address.state);
-                    if (data.address.country) addressParts.push(data.address.country);
-                    
-                    const address = addressParts.length > 0 ? addressParts.join(", ") : data.display_name;
-
-                    const inputBox = window.parent.document.querySelector('input[data-testid="stTextInput"][aria-label="📍 Location"]');
-                    if (inputBox) {
-                        inputBox.value = address;
-
-                        // Fire input event to trigger Streamlit to detect the change
-                        const inputEvent = new Event('input', { bubbles: true });
-                        inputBox.dispatchEvent(inputEvent);
-                        
-                        // Add a small delay to ensure Streamlit processes the change
-                        setTimeout(() => {
-                            window.parent.document.querySelector('button[data-testid="baseButton-secondary"]').click();
-                        }, 500);
-                    }
-                },
-                (err) => {
-                    alert("Failed to get location: " + err.message);
-                },
-                { enableHighAccuracy: true }
-            );
-            </script>
-            """, unsafe_allow_html=True)
+        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
@@ -338,7 +287,7 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                             <div style="margin-top: 10px;">
-                                <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
+                                <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
@@ -392,7 +341,7 @@ if st.session_state.page == "Recommend":
             with cols[idx % 2]:
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"[View on Map]({r['Google Maps Link']})", unsafe_allow_html=True)
+                st.markdown(f"[locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
                 if r["Image"]:
                     st.markdown(f"""
