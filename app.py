@@ -178,9 +178,44 @@ if st.session_state.page == "Recommend":
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
 
-    col1, _ = st.columns([1, 1])
-    with col1:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
+    col1, col2 = st.columns([3, 1])
+
+with col1:
+    location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria", key="location_input")
+
+with col2:
+    if st.button("📡 Locate Me"):
+        st.markdown("""
+        <script>
+        navigator.geolocation.getCurrentPosition(
+            async (pos) => {
+                const lat = pos.coords.latitude;
+                const lon = pos.coords.longitude;
+
+                // Reverse geocode with OpenStreetMap Nominatim
+                const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`);
+                const data = await response.json();
+                
+                // Use city/town/village, or fallback to display_name
+                const address = data.address.city || data.address.town || data.address.village || data.display_name || "Unknown location";
+
+                const inputBox = window.parent.document.querySelector('input[data-testid="stTextInput"][aria-label="📍 Location"]');
+                if (inputBox) {
+                    inputBox.value = address;
+
+                    // Fire input event to trigger Streamlit to detect the change
+                    const inputEvent = new Event('input', { bubbles: true });
+                    inputBox.dispatchEvent(inputEvent);
+                }
+            },
+            (err) => {
+                alert("Failed to get location: " + err.message);
+            },
+            { enableHighAccuracy: true }
+        );
+        </script>
+        """, unsafe_allow_html=True)
+
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
