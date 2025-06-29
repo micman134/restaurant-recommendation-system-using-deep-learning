@@ -182,7 +182,6 @@ if st.session_state.page == "Recommend":
     with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
     if st.button("🔍 Search"):
@@ -197,7 +196,6 @@ if st.session_state.page == "Recommend":
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
                 params = {"query": food, "near": location, "limit": 20}
-                #"categories":"13099,13236,13065,19014"
                 res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
                 restaurants = res.json().get("results", [])
 
@@ -406,6 +404,6 @@ elif st.session_state.page == "About":
     --- 
     _Powered by OpenAI and Streamlit._
     """)
- 
+
 # Footer
 st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
