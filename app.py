@@ -59,20 +59,33 @@ st.markdown(
         width: 100%;
         height: 100%;
         object-fit: cover;
+        transition: transform 0.3s ease;
+    }
+    .gallery-img:hover {
+        transform: scale(1.03);
     }
     .gallery-caption {
         text-align: center;
         margin-top: 5px;
     }
     
-    /* Map link styling */
-    .map-link {
+    /* Link styling */
+    .map-link, .website-link {
         color: #4CAF50 !important;
         text-decoration: none;
         font-weight: bold;
     }
-    .map-link:hover {
+    .map-link:hover, .website-link:hover {
         text-decoration: underline;
+    }
+    
+    /* Highlight card styling */
+    .highlight-card {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
     </style>
     """,
@@ -145,7 +158,6 @@ def append_history(data_dict):
         
         # Add to Firestore
         db.collection("recommendations").add(data_dict)
-        st.success("New recommendation saved to history!")
     except Exception as e:
         st.error(f"Error saving to Firebase: {e}")
 
@@ -214,6 +226,13 @@ if st.session_state.page == "Recommend":
                         maps_query = urllib.parse.quote_plus(f"{name}, {address}")
                         maps_link = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
 
+                        # Get detailed venue info (for website URL)
+                        details_url = f"https://api.foursquare.com/v3/places/{fsq_id}"
+                        details_res = requests.get(details_url, headers=headers)
+                        details = details_res.json()
+                        website_url = details.get('url', '')  # Restaurant's official website
+                        foursquare_url = details.get('canonicalUrl', f'https://foursquare.com/v/{fsq_id}')  # Foursquare page
+
                         tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
                         tips_res = requests.get(tips_url, headers=headers)
                         tips = tips_res.json()
@@ -239,11 +258,13 @@ if st.session_state.page == "Recommend":
                             "Restaurant": name,
                             "Address": address,
                             "Google Maps Link": maps_link,
+                            "Website": website_url if website_url else foursquare_url,
                             "Rating": avg_rating,
                             "Stars": "⭐" * int(round(avg_rating)) if avg_rating > 0 else "No reviews",
                             "Reviews": len(sentiments),
                             "Image": photo_url,
-                            "Tips": review_texts[:2] if review_texts else ["No reviews available"]
+                            "Tips": review_texts[:2] if review_texts else ["No reviews available"],
+                            "FSQ_ID": fsq_id
                         })
 
                     if results:
@@ -288,6 +309,7 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                             <div style="margin-top: 10px;">
                                 <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
+                                {f'<br><a href="{r["Website"]}" target="_blank" class="website-link">🌐 Visit Website</a>' if r["Website"] and not r["Website"].startswith("https://foursquare.com") else ''}
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
@@ -306,15 +328,17 @@ if st.session_state.page == "Recommend":
             with gallery_cols[idx % 3]:
                 st.markdown(f"""
                     <div class="gallery-img-container">
-                        <img src="{r['Image']}" class="gallery-img" />
+                        <a href="{r['Website']}" target="_blank">
+                            <img src="{r['Image']}" class="gallery-img" />
+                        </a>
                     </div>
                     <div class="gallery-caption">
                         <strong>{r['Restaurant']}</strong><br>
                         {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
                         <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
+                        {f'<br><a href="{r["Website"]}" target="_blank" class="website-link">🌐 Visit Website</a>' if r["Website"] and not r["Website"].startswith("https://foursquare.com") else ''}
                     </div>
                 """, unsafe_allow_html=True)
-        # ================================
 
         st.divider()
         if reviewed_restaurants:
@@ -326,6 +350,7 @@ if st.session_state.page == "Recommend":
                 "Rating": top["Rating"],
                 "Address": top["Address"],
                 "Google Maps Link": top["Google Maps Link"],
+                "Website": top["Website"],
                 "Food": food,
                 "Location": location
             }
@@ -339,20 +364,36 @@ if st.session_state.page == "Recommend":
         cols = st.columns(2)
         for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
             with cols[idx % 2]:
-                st.markdown(f"### {r['Restaurant']}")
-                st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"[locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
-                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
+                st.markdown(f"""
+                    <div class="highlight-card">
+                        <h3>{r['Restaurant']}</h3>
+                        <p><strong>📍 Address:</strong> {r['Address']}</p>
+                        <p><a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 Locate restaurant</a></p>
+                        {f'<p><a href="{r["Website"]}" target="_blank" class="website-link">🌐 Visit Website</a></p>' if r["Website"] and not r["Website"].startswith("https://foursquare.com") else ''}
+                        <p><strong>⭐ Rating:</strong> {r['Rating']} ({r['Reviews']} reviews) {r['Stars'] if r['Rating'] > 0 else 'No reviews'}</p>
+                """, unsafe_allow_html=True)
+                
                 if r["Image"]:
                     st.markdown(f"""
                         <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
-                            <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
+                            <a href="{r['Website']}" target="_blank">
+                                <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
+                            </a>
                         </div>
                     """, unsafe_allow_html=True)
-                st.markdown("💬 **Reviews:**")
+                
+                st.markdown("""
+                        <p><strong>💬 Reviews:</strong></p>
+                        <ul style="margin-top: 0;">
+                """, unsafe_allow_html=True)
+                
                 for tip in r["Tips"]:
-                    st.markdown(f"• _{tip}_")
-                st.markdown("---")
+                    st.markdown(f"<li>_{tip}_</li>", unsafe_allow_html=True)
+                
+                st.markdown("""
+                        </ul>
+                    </div>
+                """, unsafe_allow_html=True)
 
 # -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
@@ -386,6 +427,9 @@ elif st.session_state.page == "History":
         # Add map links if they exist in the data
         if 'Google Maps Link' in df_hist.columns:
             df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
+        
+        if 'Website' in df_hist.columns:
+            df_hist['Website'] = df_hist['Website'].apply(lambda x: f"[🌐 Visit Website]({x})" if x else "")
         
         df_hist.index += 1
         st.dataframe(df_hist, use_container_width=True)
