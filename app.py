@@ -287,7 +287,7 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                             <div style="margin-top: 10px;">
-                                <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
+                                <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
