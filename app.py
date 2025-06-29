@@ -309,7 +309,7 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
                             <div style="margin-top: 10px;">
                                 <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
-                                {f'<br><a href="{r["Website"]}" target="_blank" class="website-link">🌐 Visit Website</a>' if r["Website"] and not r["Website"].startswith("https://foursquare.com") else ''}
+                                {f'<br><a href="{r.get("Website", "")}" target="_blank" class="website-link">🌐 Visit Website</a>' if r.get("Website") and not str(r["Website"]).startswith("https://foursquare.com") else ''}
                             </div>
                         </div>
                     """, unsafe_allow_html=True)
@@ -328,7 +328,7 @@ if st.session_state.page == "Recommend":
             with gallery_cols[idx % 3]:
                 st.markdown(f"""
                     <div class="gallery-img-container">
-                        <a href="{r['Website']}" target="_blank">
+                        <a href="{r.get('Website', '')}" target="_blank">
                             <img src="{r['Image']}" class="gallery-img" />
                         </a>
                     </div>
@@ -336,7 +336,7 @@ if st.session_state.page == "Recommend":
                         <strong>{r['Restaurant']}</strong><br>
                         {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
                         <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
-                        {f'<br><a href="{r["Website"]}" target="_blank" class="website-link">🌐 Visit Website</a>' if r["Website"] and not r["Website"].startswith("https://foursquare.com") else ''}
+                        {f'<br><a href="{r.get("Website", "")}" target="_blank" class="website-link">🌐 Visit Website</a>' if r.get("Website") and not str(r["Website"]).startswith("https://foursquare.com") else ''}
                     </div>
                 """, unsafe_allow_html=True)
 
@@ -369,14 +369,14 @@ if st.session_state.page == "Recommend":
                         <h3>{r['Restaurant']}</h3>
                         <p><strong>📍 Address:</strong> {r['Address']}</p>
                         <p><a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 Locate restaurant</a></p>
-                        {f'<p><a href="{r["Website"]}" target="_blank" class="website-link">🌐 Visit Website</a></p>' if r["Website"] and not r["Website"].startswith("https://foursquare.com") else ''}
+                        {f'<p><a href="{r.get("Website", "")}" target="_blank" class="website-link">🌐 Visit Website</a></p>' if r.get("Website") and not str(r["Website"]).startswith("https://foursquare.com") else ''}
                         <p><strong>⭐ Rating:</strong> {r['Rating']} ({r['Reviews']} reviews) {r['Stars'] if r['Rating'] > 0 else 'No reviews'}</p>
                 """, unsafe_allow_html=True)
                 
                 if r["Image"]:
                     st.markdown(f"""
                         <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
-                            <a href="{r['Website']}" target="_blank">
+                            <a href="{r.get('Website', '')}" target="_blank">
                                 <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
                             </a>
                         </div>
@@ -429,7 +429,7 @@ elif st.session_state.page == "History":
             df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
         
         if 'Website' in df_hist.columns:
-            df_hist['Website'] = df_hist['Website'].apply(lambda x: f"[🌐 Visit Website]({x})" if x else "")
+            df_hist['Website'] = df_hist['Website'].apply(lambda x: f"[🌐 Visit Website]({x})" if x and not str(x).startswith("https://foursquare.com") else "")
         
         df_hist.index += 1
         st.dataframe(df_hist, use_container_width=True)
