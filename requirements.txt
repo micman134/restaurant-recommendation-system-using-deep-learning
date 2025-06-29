@@ -1,7 +1,7 @@
 streamlit==1.27.2
 pandas==2.1.4
 requests==2.31.0
-transformers==4.38.2
+transformers
 torch==2.1.0
 sentencepiece==0.1.99
 geocoder
