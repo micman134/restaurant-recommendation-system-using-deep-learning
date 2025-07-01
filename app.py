@@ -1,84 +1,98 @@
 import streamlit as st
-import pandas as pd
 import requests
-import urllib.parse
+import pandas as pd
 from transformers import pipeline
 import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
-from streamlit_javascript import st_javascript
+import urllib.parse
 
-# Page config
+# Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-# Background & overlay CSS
+# Add background image and dark overlay
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-image: url("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+    
+    /* Dark overlay */
+    .stApp:before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 0;
+    }
+    
+    /* Keep all your existing styles below */
+    #MainMenu, footer, header {visibility: hidden;}
+    .stDeployButton, .st-emotion-cache-13ln4jf, button[kind="icon"] {
+        display: none !important;
+    }
+    .custom-footer {
+        text-align: center;
+        font-size: 14px;
+        margin-top: 50px;
+        padding: 20px;
+        color: #aaa;
+    }
+    
+    /* Gallery image styling */
+    .gallery-img-container {
+        width: 100%;
+        height: 250px;
+        overflow: hidden;
+        border-radius: 10px;
+        margin-bottom: 10px;
+    }
+    .gallery-img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .gallery-caption {
+        text-align: center;
+        margin-top: 5px;
+    }
+    
+    /* Map link styling */
+    .map-link {
+        color: #4CAF50 !important;
+        text-decoration: none;
+        font-weight: bold;
+    }
+    .map-link:hover {
+        text-decoration: underline;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# Autofocus on the food input field
 st.markdown("""
-<style>
-.stApp {
-    background-image: url("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4");
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-}
-.stApp:before {
-    content: "";
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.85);
-    z-index: 0;
-}
-#MainMenu, footer, header {visibility: hidden;}
-.custom-footer {
-    text-align: center;
-    font-size: 14px;
-    margin-top: 50px;
-    padding: 20px;
-    color: #aaa;
-}
-.gallery-img-container {
-    width: 100%; height: 250px; overflow: hidden;
-    border-radius: 10px; margin-bottom: 10px;
-}
-.gallery-img {
-    width: 100%; height: 100%; object-fit: cover;
-}
-.gallery-caption {
-    text-align: center; margin-top: 5px;
-}
-.map-link {
-    color: #4CAF50 !important; text-decoration: none; font-weight: bold;
-}
-.map-link:hover {
-    text-decoration: underline;
-}
-</style>
+    <script>
+    const foodInput = window.parent.document.querySelectorAll('input[type="text"]')[0];
+    if (foodInput) { foodInput.focus(); }
+    </script>
 """, unsafe_allow_html=True)
 
-# Reverse geocode function using OpenStreetMap Nominatim API
-def reverse_geocode(lat, lon):
-    url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lon}"
-    try:
-        res = requests.get(url, headers={'User-Agent': 'streamlit-app'})
-        if res.status_code == 200:
-            data = res.json()
-            address = data.get("address", {})
-            city = address.get("city") or address.get("town") or address.get("village") or ""
-            state = address.get("state") or ""
-            country = address.get("country") or ""
-            loc = f"{city or state}, {country}".strip(", ")
-            return loc
-        else:
-            return ""
-    except Exception as e:
-        return ""
-
-# Load sentiment analysis model (cached)
+# Load sentiment analysis model
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
-# Initialize Firebase once
+# Initialize Firebase
 if not firebase_admin._apps:
     cred = credentials.Certificate({
         "type": st.secrets["firebase"]["type"],
@@ -112,16 +126,24 @@ def read_history():
 def append_history(data_dict):
     food = data_dict.get("Food", "").strip()
     location = data_dict.get("Location", "").strip()
+
     if not food or not location:
         return
+
     try:
+        # Check for duplicate entry
         docs = db.collection("recommendations").where("Restaurant", "==", data_dict.get("Restaurant")) \
                                               .where("Food", "==", food) \
                                               .where("Location", "==", location) \
                                               .stream()
+        
         if len(list(docs)) > 0:
             return
+
+        # Add timestamp
         data_dict["timestamp"] = datetime.now()
+        
+        # Add to Firestore
         db.collection("recommendations").add(data_dict)
         st.success("New recommendation saved to history!")
     except Exception as e:
@@ -143,7 +165,7 @@ with st.sidebar:
     if st.button("About"):
         st.session_state.page = "About"
 
-# Main app pages
+# -------- PAGE: Recommend --------
 if st.session_state.page == "Recommend":
     st.title("🍽️ AI Restaurant Recommender")
     st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
@@ -152,34 +174,17 @@ if st.session_state.page == "Recommend":
         st.session_state.results = None
         st.session_state.df = None
 
-    # Food input
-    food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza", key="food_input")
-
-    # Location input + Detect Location button
-    col1, col2 = st.columns([3,1])
+    col1, _ = st.columns([1, 1])
     with col1:
-        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria", key="location_input")
-    with col2:
-        if st.button("📍 Detect My Location"):
-            coords = st_javascript("navigator.geolocation.getCurrentPosition(pos => pos.coords.latitude + ',' + pos.coords.longitude)")
-            if coords:
-                lat_str, lon_str = coords.split(",")
-                lat, lon = float(lat_str), float(lon_str)
-                detected_loc = reverse_geocode(lat, lon)
-                if detected_loc:
-                    st.session_state.location_input = detected_loc
-                    st.experimental_rerun()
-                else:
-                    st.warning("Could not determine location name from coordinates.")
-            else:
-                st.warning("Location access denied or unavailable.")
+        food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
+
+    col1, _ = st.columns([1, 1])
+    with col1:
+        location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
     if st.button("🔍 Search"):
-        food = st.session_state.get("food_input", "")
-        location = st.session_state.get("location_input", "")
-
         if not food or not location:
             st.warning("⚠️ Please enter both a food type and location.")
         elif not api_key:
@@ -205,6 +210,7 @@ if st.session_state.page == "Recommend":
                         name = r['name']
                         address = r['location'].get('formatted_address', 'Unknown')
                         
+                        # Create Google Maps link
                         maps_query = urllib.parse.quote_plus(f"{name}, {address}")
                         maps_link = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
 
@@ -259,6 +265,7 @@ if st.session_state.page == "Recommend":
         st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
+        # Filter out restaurants with zero reviews for top picks
         reviewed_restaurants = [r for r in st.session_state.results if r["Reviews"] > 0]
         top3 = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:3] if reviewed_restaurants else []
         
@@ -285,10 +292,14 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
+        # ======== Gallery Pick Section ========
         st.divider()
         st.subheader("🖼️ Gallery Pick")
 
+        # Filter out restaurants without images
         restaurants_with_images = [r for r in st.session_state.results if r["Image"]]
+        
+        # Create columns for the gallery
         gallery_cols = st.columns(3)
         
         for idx, r in enumerate(sorted(restaurants_with_images, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
@@ -303,6 +314,7 @@ if st.session_state.page == "Recommend":
                         <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
                     </div>
                 """, unsafe_allow_html=True)
+        # ================================
 
         st.divider()
         if reviewed_restaurants:
@@ -342,6 +354,7 @@ if st.session_state.page == "Recommend":
                     st.markdown(f"• _{tip}_")
                 st.markdown("---")
 
+# -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
     st.title("🤖 Deep Learning Explained")
     st.markdown("""
@@ -357,19 +370,27 @@ elif st.session_state.page == "Deep Learning":
     Feel free to explore the Recommend tab and try it yourself!
     """)
 
+# -------- PAGE: History --------
 elif st.session_state.page == "History":
     st.title("📚 Recommendation History")
+
     history_data = read_history()
     if not history_data:
         st.info("No history available yet. Try making some recommendations first!")
     else:
+        # Convert to DataFrame for nice display
         df_hist = pd.DataFrame(history_data)
+        # Remove internal fields
         df_hist = df_hist.drop(columns=['id', 'timestamp'], errors='ignore')
+        
+        # Add map links if they exist in the data
         if 'Google Maps Link' in df_hist.columns:
             df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
+        
         df_hist.index += 1
         st.dataframe(df_hist, use_container_width=True)
 
+# -------- PAGE: About --------
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
@@ -384,4 +405,5 @@ elif st.session_state.page == "About":
     _Powered by OpenAI and Streamlit._
     """)
 
+# Footer
 st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
