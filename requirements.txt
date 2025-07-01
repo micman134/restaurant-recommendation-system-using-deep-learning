@@ -10,3 +10,4 @@ gspread
 oauth2client
 firebase-admin
 geopy
+streamlit-javascript
