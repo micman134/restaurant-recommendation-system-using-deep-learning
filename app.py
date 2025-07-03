@@ -435,4 +435,116 @@ if st.session_state.page == "Recommend":
                     """, unsafe_allow_html=True)
 
         # Gallery Pick Section
-       
+        st.divider()
+        st.subheader("🖼️ Gallery Pick")
+
+        # Filter out restaurants without images
+        restaurants_with_images = [r for r in st.session_state.results if r["Image"]]
+        
+        # Create columns for the gallery
+        gallery_cols = st.columns(3)
+        
+        for idx, r in enumerate(sorted(restaurants_with_images, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
+            with gallery_cols[idx % 3]:
+                st.markdown(f"""
+                    <div class="gallery-img-container">
+                        <img src="{r['Image']}" class="gallery-img" />
+                    </div>
+                    <div class="gallery-caption">
+                        <strong>{r['Restaurant']}</strong><br>
+                        {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
+                        <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
+                    </div>
+                """, unsafe_allow_html=True)
+
+        st.divider()
+        if reviewed_restaurants:
+            top = max(reviewed_restaurants, key=lambda x: x["Rating"])
+            st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+
+            top_pick = {
+                "Restaurant": top["Restaurant"],
+                "Rating": top["Rating"],
+                "Address": top["Address"],
+                "Google Maps Link": top["Google Maps Link"],
+                "Food": food,
+                "Location": location
+            }
+            append_history(top_pick)
+        else:
+            st.warning("No restaurants with reviews found to select a top pick.")
+
+        st.divider()
+        st.subheader("📸 Restaurant Highlights")
+
+        cols = st.columns(2)
+        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
+            with cols[idx % 2]:
+                st.markdown(f"### {r['Restaurant']}")
+                st.markdown(f"**📍 Address:** {r['Address']}")
+                st.markdown(f"[locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
+                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
+                if r["Image"]:
+                    st.markdown(f"""
+                        <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
+                            <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
+                        </div>
+                    """, unsafe_allow_html=True)
+                st.markdown("💬 **Reviews:**")
+                for tip in r["Tips"]:
+                    st.markdown(f"• _{tip}_")
+                st.markdown("---")
+
+# -------- PAGE: Deep Learning --------
+elif st.session_state.page == "Deep Learning":
+    st.title("🤖 Deep Learning Explained")
+    st.markdown("""
+    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews and provide AI-driven recommendations.
+
+    ### How it works:
+    - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
+    - Retrieves recent user reviews ("tips") for each restaurant.
+    - Uses a pretrained **BERT sentiment analysis model** to analyze the sentiment of these reviews.
+    - Calculates an average rating score from the sentiment predictions.
+    - Ranks restaurants by these AI-driven scores to recommend the best places.
+
+    Feel free to explore the Recommend tab and try it yourself!
+    """)
+
+# -------- PAGE: History --------
+elif st.session_state.page == "History":
+    st.title("📚 Recommendation History")
+
+    history_data = read_history()
+    if not history_data:
+        st.info("No history available yet. Try making some recommendations first!")
+    else:
+        # Convert to DataFrame for nice display
+        df_hist = pd.DataFrame(history_data)
+        # Remove internal fields
+        df_hist = df_hist.drop(columns=['id', 'timestamp'], errors='ignore')
+        
+        # Add map links if they exist in the data
+        if 'Google Maps Link' in df_hist.columns:
+            df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
+        
+        df_hist.index += 1
+        st.dataframe(df_hist, use_container_width=True)
+
+# -------- PAGE: About --------
+elif st.session_state.page == "About":
+    st.title("ℹ️ About This App")
+    st.markdown("""
+    **AI Restaurant Recommender** is a Streamlit web app designed to help you discover top restaurants based on your food cravings and location using:
+
+    - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
+    - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
+    - Firebase Firestore to save and track your recommendation history.
+    - Google Maps integration for easy navigation to recommended restaurants.
+
+    --- 
+    _Powered by OpenAI and Streamlit._
+    """)
+
+# Footer
+st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
