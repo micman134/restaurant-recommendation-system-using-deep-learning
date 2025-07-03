@@ -291,37 +291,10 @@ if st.session_state.page == "Recommend":
         # Only show analysis if we have ratings
         if analysis_df['Rating'].sum() > 0:
             # Create tabs for different analysis views
-            tab1, tab2, tab3 = st.tabs(["Rating Distribution", "Top Categories", "Review Insights"])
+            tab1, tab2= st.tabs(["Top Categories", "Review Insights"])
+            
             
             with tab1:
-                # Ensure ratings are numeric and filter out zeros
-                analysis_df['Rating'] = pd.to_numeric(analysis_df['Rating'], errors='coerce')
-                rated_df = analysis_df[analysis_df['Rating'] > 0]
-                
-                if not rated_df.empty:
-                    # Rating distribution chart
-                    fig = px.histogram(rated_df, x='Rating', 
-                                     title='Distribution of Ratings in Current Search',
-                                     nbins=10,
-                                     range_x=[0, 5],  # Force 0-5 range for ratings
-                                     color_discrete_sequence=['#4CAF50'],
-                                     labels={'Rating': 'Average Rating'})
-                    fig.update_layout(xaxis=dict(tickmode='linear', dtick=0.5))
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Rating vs number of reviews
-                    fig2 = px.scatter(rated_df, x='Rating', y='Reviews',
-                                     size='Reviews', hover_name='Restaurant',
-                                     title='Rating vs Number of Reviews',
-                                     color='Rating',
-                                     color_continuous_scale='Viridis',
-                                     range_x=[0, 5],
-                                     range_y=[0, max(rated_df['Reviews'])*1.1])
-                    st.plotly_chart(fig2, use_container_width=True)
-                else:
-                    st.warning("No valid rating data available for visualization")
-            
-            with tab2:
                 # Extract categories from food types
                 analysis_df['Category'] = analysis_df['Restaurant'].apply(lambda x: ' '.join([w for w in x.split() if w.isupper() or w.istitle()][:2]))
                 
@@ -343,7 +316,7 @@ if st.session_state.page == "Recommend":
                 else:
                     st.warning("No category data available for visualization")
             
-            with tab3:
+            with tab2:
                 # Sentiment analysis of reviews
                 st.markdown("### 💬 Review Sentiment Highlights")
                 
