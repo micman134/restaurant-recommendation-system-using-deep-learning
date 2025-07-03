@@ -11,3 +11,5 @@ oauth2client
 firebase-admin
 geopy
 streamlit-javascript
+plotly>=5.0.0
+wordcloud>=1.8.1
