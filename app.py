@@ -98,9 +98,6 @@ st.markdown(
         margin-left: 5px;
         font-weight: bold;
     }
-    .price-1 { color: #4CAF50; }
-    .price-2 { color: #FFC107; }
-    .price-3 { color: #F44336; }
     </style>
     """,
     unsafe_allow_html=True
@@ -297,9 +294,9 @@ if st.session_state.page == "Recommend":
         # Add price indicators to the dataframe display
         display_df = st.session_state.df.copy()
         display_df['Price'] = display_df['Price'].apply(
-            lambda x: f"{x} {'$' * x}<span class='price-indicator price-{x}'></span>" if pd.notnull(x) else "Unknown")
+            lambda x: f"{'$' * int(x)}" if pd.notnull(x) else "Unknown")
         
-        st.dataframe(display_df, use_container_width=True, escape=False)
+        st.dataframe(display_df, use_container_width=True)
 
         # ======== NEW ANALYSIS SECTION ========
         st.divider()
@@ -369,7 +366,7 @@ if st.session_state.page == "Recommend":
                         for idx, row in value_picks.iterrows():
                             st.markdown(
                                 f"**{row['Restaurant']}** - Rating: {row['Rating']:.1f} ⭐ | "
-                                f"Price: {'$' * row['Price']} | "
+                                f"Price: {'$' * int(row['Price'])} | "
                                 f"[📍 Map]({row['Google Maps Link']})")
                     else:
                         st.warning("No restaurants with valid ratings available")
