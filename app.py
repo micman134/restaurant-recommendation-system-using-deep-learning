@@ -162,7 +162,6 @@ def append_history(data_dict):
         
         # Add to Firestore
         db.collection("recommendations").add(data_dict)
-        st.success("New recommendation saved to history!")
     except Exception as e:
         st.error(f"Error saving to Firebase: {e}")
 
@@ -172,7 +171,7 @@ if "page" not in st.session_state:
 
 # Sidebar navigation
 with st.sidebar:
-    st.markdown("## 🍽️ Menu")
+    st.markdown("## �️ Menu")
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
@@ -282,7 +281,7 @@ if st.session_state.page == "Recommend":
         st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
-        # ======== NEW ANALYSIS SECTION ========
+        # ======== ANALYSIS SECTION ========
         st.divider()
         st.subheader("📈 Recommendation Analysis")
         
@@ -295,20 +294,32 @@ if st.session_state.page == "Recommend":
             tab1, tab2, tab3 = st.tabs(["Rating Distribution", "Top Categories", "Review Insights"])
             
             with tab1:
-                # Rating distribution chart
-                fig = px.histogram(analysis_df, x='Rating', 
-                                 title='Distribution of Ratings in Current Search',
-                                 nbins=10,
-                                 color_discrete_sequence=['#4CAF50'])
-                st.plotly_chart(fig, use_container_width=True)
+                # Ensure ratings are numeric and filter out zeros
+                analysis_df['Rating'] = pd.to_numeric(analysis_df['Rating'], errors='coerce')
+                rated_df = analysis_df[analysis_df['Rating'] > 0]
                 
-                # Rating vs number of reviews
-                fig2 = px.scatter(analysis_df, x='Rating', y='Reviews',
-                                 size='Reviews', hover_name='Restaurant',
-                                 title='Rating vs Number of Reviews',
-                                 color='Rating',
-                                 color_continuous_scale='Viridis')
-                st.plotly_chart(fig2, use_container_width=True)
+                if not rated_df.empty:
+                    # Rating distribution chart
+                    fig = px.histogram(rated_df, x='Rating', 
+                                     title='Distribution of Ratings in Current Search',
+                                     nbins=10,
+                                     range_x=[0, 5],  # Force 0-5 range for ratings
+                                     color_discrete_sequence=['#4CAF50'],
+                                     labels={'Rating': 'Average Rating'})
+                    fig.update_layout(xaxis=dict(tickmode='linear', dtick=0.5))
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Rating vs number of reviews
+                    fig2 = px.scatter(rated_df, x='Rating', y='Reviews',
+                                     size='Reviews', hover_name='Restaurant',
+                                     title='Rating vs Number of Reviews',
+                                     color='Rating',
+                                     color_continuous_scale='Viridis',
+                                     range_x=[0, 5],
+                                     range_y=[0, max(rated_df['Reviews'])*1.1])
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.warning("No valid rating data available for visualization")
             
             with tab2:
                 # Extract categories from food types
@@ -320,14 +331,17 @@ if st.session_state.page == "Recommend":
                     'Restaurant': 'count'
                 }).rename(columns={'Restaurant': 'Count'}).sort_values('Rating', ascending=False)
                 
-                # Category bar chart
-                fig3 = px.bar(category_df.head(10), 
-                             x=category_df.head(10).index,
-                             y='Rating',
-                             title='Top Restaurant Categories by Average Rating',
-                             color='Rating',
-                             color_continuous_scale='thermal')
-                st.plotly_chart(fig3, use_container_width=True)
+                if not category_df.empty:
+                    # Category bar chart
+                    fig3 = px.bar(category_df.head(10), 
+                                 x=category_df.head(10).index,
+                                 y='Rating',
+                                 title='Top Restaurant Categories by Average Rating',
+                                 color='Rating',
+                                 color_continuous_scale='thermal')
+                    st.plotly_chart(fig3, use_container_width=True)
+                else:
+                    st.warning("No category data available for visualization")
             
             with tab3:
                 # Sentiment analysis of reviews
