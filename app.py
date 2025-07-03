@@ -132,10 +132,10 @@ def append_history(data_dict):
 
     try:
         # Check for duplicate entry
-        docs = db.collection("recommendations").where("Restaurant", "==", data_dict.get("Restaurant")) \
-                                              .where("Food", "==", food) \
-                                              .where("Location", "==", location) \
-                                              .stream()
+        docs = db.collection("recommendations").where(filter=("Restaurant", "==", data_dict.get("Restaurant"))) \
+                                               .where(filter=("Food", "==", food)) \
+                                               .where(filter=("Location", "==", location)) \
+                                               .stream()
         
         if len(list(docs)) > 0:
             return
