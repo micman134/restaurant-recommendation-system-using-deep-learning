@@ -6,6 +6,9 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
 import urllib.parse
+import plotly.express as px
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
 
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -73,6 +76,19 @@ st.markdown(
     }
     .map-link:hover {
         text-decoration: underline;
+    }
+    
+    /* Analysis tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        padding: 8px 16px;
+        border-radius: 8px 8px 0 0;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #4CAF50;
+        color: white;
     }
     </style>
     """,
@@ -266,6 +282,81 @@ if st.session_state.page == "Recommend":
         st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
+        # ======== NEW ANALYSIS SECTION ========
+        st.divider()
+        st.subheader("📈 Recommendation Analysis")
+        
+        # Create DataFrame from results
+        analysis_df = pd.DataFrame(st.session_state.results)
+        
+        # Only show analysis if we have ratings
+        if analysis_df['Rating'].sum() > 0:
+            # Create tabs for different analysis views
+            tab1, tab2, tab3 = st.tabs(["Rating Distribution", "Top Categories", "Review Insights"])
+            
+            with tab1:
+                # Rating distribution chart
+                fig = px.histogram(analysis_df, x='Rating', 
+                                 title='Distribution of Ratings in Current Search',
+                                 nbins=10,
+                                 color_discrete_sequence=['#4CAF50'])
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Rating vs number of reviews
+                fig2 = px.scatter(analysis_df, x='Rating', y='Reviews',
+                                 size='Reviews', hover_name='Restaurant',
+                                 title='Rating vs Number of Reviews',
+                                 color='Rating',
+                                 color_continuous_scale='Viridis')
+                st.plotly_chart(fig2, use_container_width=True)
+            
+            with tab2:
+                # Extract categories from food types
+                analysis_df['Category'] = analysis_df['Restaurant'].apply(lambda x: ' '.join([w for w in x.split() if w.isupper() or w.istitle()][:2]))
+                
+                # Group by category
+                category_df = analysis_df.groupby('Category').agg({
+                    'Rating': 'mean',
+                    'Restaurant': 'count'
+                }).rename(columns={'Restaurant': 'Count'}).sort_values('Rating', ascending=False)
+                
+                # Category bar chart
+                fig3 = px.bar(category_df.head(10), 
+                             x=category_df.head(10).index,
+                             y='Rating',
+                             title='Top Restaurant Categories by Average Rating',
+                             color='Rating',
+                             color_continuous_scale='thermal')
+                st.plotly_chart(fig3, use_container_width=True)
+            
+            with tab3:
+                # Sentiment analysis of reviews
+                st.markdown("### 💬 Review Sentiment Highlights")
+                
+                # Get all review texts
+                all_reviews = [review for sublist in analysis_df['Tips'] for review in sublist if review != "No reviews available"]
+                
+                if all_reviews:
+                    # Show word cloud of common terms
+                    text = ' '.join(all_reviews)
+                    wordcloud = WordCloud(width=800, height=400, background_color='black').generate(text)
+                    
+                    plt.figure(figsize=(10, 5))
+                    plt.imshow(wordcloud, interpolation='bilinear')
+                    plt.axis("off")
+                    st.pyplot(plt)
+                    
+                    # Show longest reviews
+                    st.markdown("### 📝 Longest Reviews")
+                    longest_reviews = sorted(all_reviews, key=len, reverse=True)[:3]
+                    for i, review in enumerate(longest_reviews, 1):
+                        st.markdown(f"{i}. {review[:300]}..." if len(review) > 300 else f"{i}. {review}")
+                else:
+                    st.warning("No reviews available for analysis")
+        else:
+            st.info("No rating data available for analysis in current search results")
+
+        # ======== CONTINUE WITH EXISTING CODE ========
         # Filter out restaurants with zero reviews for top picks
         reviewed_restaurants = [r for r in st.session_state.results if r["Reviews"] > 0]
         top3 = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:3] if reviewed_restaurants else []
@@ -293,7 +384,7 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
-        # ======== Gallery Pick Section ========
+        # Gallery Pick Section
         st.divider()
         st.subheader("🖼️ Gallery Pick")
 
@@ -315,7 +406,6 @@ if st.session_state.page == "Recommend":
                         <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
                     </div>
                 """, unsafe_allow_html=True)
-        # ================================
 
         st.divider()
         if reviewed_restaurants:
