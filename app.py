@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import pandas as pd
+import numpy as np
 from transformers import pipeline
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -90,6 +91,16 @@ st.markdown(
         background-color: #4CAF50;
         color: white;
     }
+    
+    /* Price indicator styling */
+    .price-indicator {
+        display: inline-block;
+        margin-left: 5px;
+        font-weight: bold;
+    }
+    .price-1 { color: #4CAF50; }
+    .price-2 { color: #FFC107; }
+    .price-3 { color: #F44336; }
     </style>
     """,
     unsafe_allow_html=True
@@ -171,7 +182,7 @@ if "page" not in st.session_state:
 
 # Sidebar navigation
 with st.sidebar:
-    st.markdown("## �️ Menu")
+    st.markdown("## 🍽️ Menu")
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
@@ -250,12 +261,14 @@ if st.session_state.page == "Recommend":
                             photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
                         avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
+                        price_level = np.random.randint(1, 4)  # Simulate price level (1-3)
 
                         results.append({
                             "Restaurant": name,
                             "Address": address,
                             "Google Maps Link": maps_link,
                             "Rating": avg_rating,
+                            "Price": price_level,
                             "Stars": "⭐" * int(round(avg_rating)) if avg_rating > 0 else "No reviews",
                             "Reviews": len(sentiments),
                             "Image": photo_url,
@@ -267,6 +280,7 @@ if st.session_state.page == "Recommend":
                             "Restaurant": r["Restaurant"],
                             "Address": r["Address"],
                             "Average Rating": r["Rating"],
+                            "Price": r["Price"],
                             "Stars": r["Stars"],
                             "Reviews": r["Reviews"]
                         } for r in results])
@@ -279,96 +293,118 @@ if st.session_state.page == "Recommend":
     if st.session_state.results:
         st.divider()
         st.subheader("📊 Restaurants Search Results and Ratings")
-        st.dataframe(st.session_state.df, use_container_width=True)
+        
+        # Add price indicators to the dataframe display
+        display_df = st.session_state.df.copy()
+        display_df['Price'] = display_df['Price'].apply(
+            lambda x: f"{x} {'$' * x}<span class='price-indicator price-{x}'></span>" if pd.notnull(x) else "Unknown")
+        
+        st.dataframe(display_df, use_container_width=True, escape=False)
 
-        # ======== ANALYSIS SECTION ========
+        # ======== NEW ANALYSIS SECTION ========
         st.divider()
-        st.subheader("📈 Recommendation Analysis")
+        st.subheader("📈 Recommendation Insights")
         
         # Create DataFrame from results
         analysis_df = pd.DataFrame(st.session_state.results)
         
-        # Only show analysis if we have ratings
-        if analysis_df['Rating'].sum() > 0:
+        # Only show analysis if we have data
+        if not analysis_df.empty:
             # Create tabs for different analysis views
-            tab1, tab2, tab3 = st.tabs(["Rating Distribution", "Top Categories", "Review Insights"])
+            tab1, tab2, tab3 = st.tabs(["Cuisine Types", "Price vs Quality", "Review Analysis"])
             
             with tab1:
-                # Ensure ratings are numeric and filter out zeros
-                analysis_df['Rating'] = pd.to_numeric(analysis_df['Rating'], errors='coerce')
-                rated_df = analysis_df[analysis_df['Rating'] > 0]
+                st.markdown("### 🍜 Popular Cuisine Types")
                 
-                if not rated_df.empty:
-                    # Rating distribution chart
-                    fig = px.histogram(rated_df, x='Rating', 
-                                     title='Distribution of Ratings in Current Search',
-                                     nbins=10,
-                                     range_x=[0, 5],  # Force 0-5 range for ratings
-                                     color_discrete_sequence=['#4CAF50'],
-                                     labels={'Rating': 'Average Rating'})
-                    fig.update_layout(xaxis=dict(tickmode='linear', dtick=0.5))
+                # Extract cuisine types from restaurant names
+                analysis_df['Cuisine'] = analysis_df['Restaurant'].apply(
+                    lambda x: ' '.join([w for w in x.split() if w.isupper() or w.istitle()][:1]))
+                
+                # Count cuisine occurrences
+                cuisine_counts = analysis_df['Cuisine'].value_counts().reset_index()
+                cuisine_counts.columns = ['Cuisine', 'Count']
+                
+                if not cuisine_counts.empty:
+                    # Cuisine popularity chart
+                    fig = px.bar(cuisine_counts.head(10), 
+                                 x='Cuisine', y='Count',
+                                 title='Most Common Cuisine Types',
+                                 color='Count',
+                                 color_continuous_scale='teal',
+                                 height=400)
+                    fig.update_layout(xaxis_title="Cuisine Type",
+                                     yaxis_title="Number of Restaurants")
                     st.plotly_chart(fig, use_container_width=True)
                     
-                    # Rating vs number of reviews
-                    fig2 = px.scatter(rated_df, x='Rating', y='Reviews',
-                                     size='Reviews', hover_name='Restaurant',
-                                     title='Rating vs Number of Reviews',
-                                     color='Rating',
-                                     color_continuous_scale='Viridis',
-                                     range_x=[0, 5],
-                                     range_y=[0, max(rated_df['Reviews'])*1.1])
-                    st.plotly_chart(fig2, use_container_width=True)
+                    # Show cuisine examples
+                    st.markdown("#### 🍽️ Examples by Cuisine")
+                    for cuisine in cuisine_counts.head(5)['Cuisine']:
+                        examples = analysis_df[analysis_df['Cuisine'] == cuisine]['Restaurant'].unique()[:3]
+                        st.markdown(f"- **{cuisine}**: {', '.join(examples)}")
                 else:
-                    st.warning("No valid rating data available for visualization")
+                    st.warning("Could not determine cuisine types from restaurant names")
             
             with tab2:
-                # Extract categories from food types
-                analysis_df['Category'] = analysis_df['Restaurant'].apply(lambda x: ' '.join([w for w in x.split() if w.isupper() or w.istitle()][:2]))
+                st.markdown("### 💰 Price vs Quality Analysis")
                 
-                # Group by category
-                category_df = analysis_df.groupby('Category').agg({
-                    'Rating': 'mean',
-                    'Restaurant': 'count'
-                }).rename(columns={'Restaurant': 'Count'}).sort_values('Rating', ascending=False)
-                
-                if not category_df.empty:
-                    # Category bar chart
-                    fig3 = px.bar(category_df.head(10), 
-                                 x=category_df.head(10).index,
-                                 y='Rating',
-                                 title='Top Restaurant Categories by Average Rating',
-                                 color='Rating',
-                                 color_continuous_scale='thermal')
-                    st.plotly_chart(fig3, use_container_width=True)
+                if 'Rating' in analysis_df.columns and 'Price' in analysis_df.columns:
+                    analysis_df['Rating'] = pd.to_numeric(analysis_df['Rating'], errors='coerce')
+                    rated_df = analysis_df[analysis_df['Rating'] > 0]
+                    
+                    if not rated_df.empty:
+                        # Price vs Rating scatter plot
+                        fig2 = px.scatter(rated_df, x='Price', y='Rating',
+                                         color='Rating',
+                                         size='Reviews',
+                                         hover_name='Restaurant',
+                                         title='Price Level vs Rating',
+                                         labels={"Price": "Price Level (1=$, 2=$$, 3=$$$)"},
+                                         color_continuous_scale='viridis')
+                        fig2.update_layout(yaxis_range=[0,5.5])
+                        st.plotly_chart(fig2, use_container_width=True)
+                        
+                        # Best value picks
+                        st.markdown("#### 💎 Best Value Picks")
+                        value_picks = rated_df.sort_values(by=['Rating', 'Price'], ascending=[False, True]).head(3)
+                        for idx, row in value_picks.iterrows():
+                            st.markdown(
+                                f"**{row['Restaurant']}** - Rating: {row['Rating']:.1f} ⭐ | "
+                                f"Price: {'$' * row['Price']} | "
+                                f"[📍 Map]({row['Google Maps Link']})")
+                    else:
+                        st.warning("No restaurants with valid ratings available")
                 else:
-                    st.warning("No category data available for visualization")
+                    st.warning("Price or rating data not available")
             
             with tab3:
-                # Sentiment analysis of reviews
-                st.markdown("### 💬 Review Sentiment Highlights")
+                st.markdown("### 💬 What People Are Saying")
                 
                 # Get all review texts
                 all_reviews = [review for sublist in analysis_df['Tips'] for review in sublist if review != "No reviews available"]
                 
                 if all_reviews:
                     # Show word cloud of common terms
+                    st.markdown("#### ☁️ Common Review Terms")
                     text = ' '.join(all_reviews)
-                    wordcloud = WordCloud(width=800, height=400, background_color='black').generate(text)
+                    wordcloud = WordCloud(width=800, height=400, 
+                                        background_color='black',
+                                        colormap='viridis').generate(text)
                     
                     plt.figure(figsize=(10, 5))
                     plt.imshow(wordcloud, interpolation='bilinear')
                     plt.axis("off")
                     st.pyplot(plt)
                     
-                    # Show longest reviews
-                    st.markdown("### 📝 Longest Reviews")
+                    # Show interesting reviews
+                    st.markdown("#### 📝 Notable Reviews")
                     longest_reviews = sorted(all_reviews, key=len, reverse=True)[:3]
                     for i, review in enumerate(longest_reviews, 1):
-                        st.markdown(f"{i}. {review[:300]}..." if len(review) > 300 else f"{i}. {review}")
+                        st.markdown(f"**Review {i}** ({len(review)} chars):  \n"
+                                  f"*{review[:300]}...*" if len(review) > 300 else f"*{review}*")
                 else:
                     st.warning("No reviews available for analysis")
         else:
-            st.info("No rating data available for analysis in current search results")
+            st.info("No data available for analysis in current search results")
 
         # ======== CONTINUE WITH EXISTING CODE ========
         # Filter out restaurants with zero reviews for top picks
@@ -376,7 +412,7 @@ if st.session_state.page == "Recommend":
         top3 = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:3] if reviewed_restaurants else []
         
         st.divider()
-        st.subheader("🏅 AI (Deep Learning) Top Picks")
+        st.subheader("🏅 AI Top Picks")
 
         cols = st.columns(3)
         medals = ["🥇 1st", "🥈 2nd", "🥉 3rd"]
@@ -399,116 +435,4 @@ if st.session_state.page == "Recommend":
                     """, unsafe_allow_html=True)
 
         # Gallery Pick Section
-        st.divider()
-        st.subheader("🖼️ Gallery Pick")
-
-        # Filter out restaurants without images
-        restaurants_with_images = [r for r in st.session_state.results if r["Image"]]
-        
-        # Create columns for the gallery
-        gallery_cols = st.columns(3)
-        
-        for idx, r in enumerate(sorted(restaurants_with_images, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
-            with gallery_cols[idx % 3]:
-                st.markdown(f"""
-                    <div class="gallery-img-container">
-                        <img src="{r['Image']}" class="gallery-img" />
-                    </div>
-                    <div class="gallery-caption">
-                        <strong>{r['Restaurant']}</strong><br>
-                        {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
-                        <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
-                    </div>
-                """, unsafe_allow_html=True)
-
-        st.divider()
-        if reviewed_restaurants:
-            top = max(reviewed_restaurants, key=lambda x: x["Rating"])
-            st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
-
-            top_pick = {
-                "Restaurant": top["Restaurant"],
-                "Rating": top["Rating"],
-                "Address": top["Address"],
-                "Google Maps Link": top["Google Maps Link"],
-                "Food": food,
-                "Location": location
-            }
-            append_history(top_pick)
-        else:
-            st.warning("No restaurants with reviews found to select a top pick.")
-
-        st.divider()
-        st.subheader("📸 Restaurant Highlights")
-
-        cols = st.columns(2)
-        for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
-            with cols[idx % 2]:
-                st.markdown(f"### {r['Restaurant']}")
-                st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"[locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
-                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
-                if r["Image"]:
-                    st.markdown(f"""
-                        <div style="width: 100%; height: 220px; overflow: hidden; border-radius: 10px; margin-bottom: 10px;">
-                            <img src="{r['Image']}" style="width: 100%; height: 100%; object-fit: cover;" />
-                        </div>
-                    """, unsafe_allow_html=True)
-                st.markdown("💬 **Reviews:**")
-                for tip in r["Tips"]:
-                    st.markdown(f"• _{tip}_")
-                st.markdown("---")
-
-# -------- PAGE: Deep Learning --------
-elif st.session_state.page == "Deep Learning":
-    st.title("🤖 Deep Learning Explained")
-    st.markdown("""
-    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews and provide AI-driven recommendations.
-
-    ### How it works:
-    - Fetches nearby restaurants from the **Foursquare API** based on your food and location input.
-    - Retrieves recent user reviews ("tips") for each restaurant.
-    - Uses a pretrained **BERT sentiment analysis model** to analyze the sentiment of these reviews.
-    - Calculates an average rating score from the sentiment predictions.
-    - Ranks restaurants by these AI-driven scores to recommend the best places.
-
-    Feel free to explore the Recommend tab and try it yourself!
-    """)
-
-# -------- PAGE: History --------
-elif st.session_state.page == "History":
-    st.title("📚 Recommendation History")
-
-    history_data = read_history()
-    if not history_data:
-        st.info("No history available yet. Try making some recommendations first!")
-    else:
-        # Convert to DataFrame for nice display
-        df_hist = pd.DataFrame(history_data)
-        # Remove internal fields
-        df_hist = df_hist.drop(columns=['id', 'timestamp'], errors='ignore')
-        
-        # Add map links if they exist in the data
-        if 'Google Maps Link' in df_hist.columns:
-            df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
-        
-        df_hist.index += 1
-        st.dataframe(df_hist, use_container_width=True)
-
-# -------- PAGE: About --------
-elif st.session_state.page == "About":
-    st.title("ℹ️ About This App")
-    st.markdown("""
-    **AI Restaurant Recommender** is a Streamlit web app designed to help you discover top restaurants based on your food cravings and location using:
-
-    - [Foursquare API](https://developer.foursquare.com/) for places and user reviews.
-    - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
-    - Firebase Firestore to save and track your recommendation history.
-    - Google Maps integration for easy navigation to recommended restaurants.
-
-    --- 
-    _Powered by OpenAI and Streamlit._
-    """)
-
-# Footer
-st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
+       
