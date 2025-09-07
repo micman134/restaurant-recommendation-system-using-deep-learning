@@ -9,7 +9,6 @@ import urllib.parse
 import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
-import json
 
 # Set page configuration
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -91,15 +90,6 @@ st.markdown(
         background-color: #4CAF50;
         color: white;
     }
-    
-    /* Debug section styling */
-    .debug-section {
-        background-color: #2d2d2d;
-        padding: 15px;
-        border-radius: 10px;
-        margin: 10px 0;
-        border-left: 4px solid #ff6b6b;
-    }
     </style>
     """,
     unsafe_allow_html=True
@@ -116,37 +106,27 @@ st.markdown("""
 # Load sentiment analysis model
 @st.cache_resource(show_spinner=False)
 def get_classifier():
-    try:
-        return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
-    except Exception as e:
-        st.error(f"Failed to load sentiment analysis model: {e}")
-        return None
+    return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
 # Initialize Firebase
-try:
-    if not firebase_admin._apps:
-        cred = credentials.Certificate({
-            "type": st.secrets["firebase"]["type"],
-            "project_id": st.secrets["firebase"]["project_id"],
-            "private_key_id": st.secrets["firebase"]["private_key_id"],
-            "private_key": st.secrets["firebase"]["private_key"].replace('\\n', '\n'),
-            "client_email": st.secrets["firebase"]["client_email"],
-            "client_id": st.secrets["firebase"]["client_id"],
-            "auth_uri": st.secrets["firebase"]["auth_uri"],
-            "token_uri": st.secrets["firebase"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"]
-        })
-        firebase_admin.initialize_app(cred)
-    
-    db = firestore.client()
-except Exception as e:
-    st.error(f"Firebase initialization failed: {e}")
-    db = None
+if not firebase_admin._apps:
+    cred = credentials.Certificate({
+        "type": st.secrets["firebase"]["type"],
+        "project_id": st.secrets["firebase"]["project_id"],
+        "private_key_id": st.secrets["firebase"]["private_key_id"],
+        "private_key": st.secrets["firebase"]["private_key"].replace('\\n', '\n'),
+        "client_email": st.secrets["firebase"]["client_email"],
+        "client_id": st.secrets["firebase"]["client_id"],
+        "auth_uri": st.secrets["firebase"]["auth_uri"],
+        "token_uri": st.secrets["firebase"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"]
+    })
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 def read_history():
-    if not db:
-        return []
     try:
         docs = db.collection("recommendations").stream()
         history_data = []
@@ -160,9 +140,6 @@ def read_history():
         return []
 
 def append_history(data_dict):
-    if not db:
-        return
-        
     food = data_dict.get("Food", "").strip()
     location = data_dict.get("Location", "").strip()
 
@@ -170,11 +147,11 @@ def append_history(data_dict):
         return
 
     try:
-        # Check for duplicate entry
+        # Check for duplicate entry using keyword arguments
         docs = db.collection("recommendations") \
-                 .where("Restaurant", "==", data_dict.get("Restaurant")) \
-                 .where("Food", "==", food) \
-                 .where("Location", "==", location) \
+                 .where(field_path="Restaurant", op_string="==", value=data_dict.get("Restaurant")) \
+                 .where(field_path="Food", op_string="==", value=food) \
+                 .where(field_path="Location", op_string="==", value=location) \
                  .stream()
         
         if len(list(docs)) > 0:
@@ -191,16 +168,10 @@ def append_history(data_dict):
 # Session state initialization
 if "page" not in st.session_state:
     st.session_state.page = "Recommend"
-if "debug_mode" not in st.session_state:
-    st.session_state.debug_mode = False
-if "results" not in st.session_state:
-    st.session_state.results = None
-if "df" not in st.session_state:
-    st.session_state.df = None
 
 # Sidebar navigation
 with st.sidebar:
-    st.markdown("## 🍕 Menu")
+    st.markdown("## �️ Menu")
     if st.button("Recommend"):
         st.session_state.page = "Recommend"
     if st.button("Deep Learning"):
@@ -209,185 +180,87 @@ with st.sidebar:
         st.session_state.page = "History"
     if st.button("About"):
         st.session_state.page = "About"
-    
-    st.divider()
-    st.session_state.debug_mode = st.checkbox("🔧 Debug Mode", value=False)
 
 # -------- PAGE: Recommend --------
 if st.session_state.page == "Recommend":
     st.title("🍽️ AI Restaurant Recommender")
     st.markdown("Find top-rated restaurants near you using **Foursquare** and **AI sentiment analysis** of real user reviews.")
 
-    col1, col2 = st.columns([2, 1])
+    if "results" not in st.session_state:
+        st.session_state.results = None
+        st.session_state.df = None
+
+    col1, _ = st.columns([1, 1])
     with col1:
         food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
-    with col2:
+
+    col1, _ = st.columns([1, 1])
+    with col1:
         location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
     api_key = st.secrets.get("FOURSQUARE_API_KEY", "")
 
-    # Test button for debugging
-    if st.session_state.debug_mode:
-        if st.button("🛠️ Test API with Sample Data"):
-            test_food = "pizza"
-            test_location = "New York"
-            
-            st.markdown("### 🧪 API Test Results")
-            st.write(f"Testing with: Food='{test_food}', Location='{test_location}'")
-            
-            headers = {"accept": "application/json", "Authorization": api_key}
-            params = {"query": test_food, "near": test_location, "limit": 5}
-            
-            try:
-                res = requests.get("https://api.foursquare.com/v3/places/search", 
-                                  headers=headers, params=params, timeout=10)
-                
-                st.write(f"**Status Code:** {res.status_code}")
-                st.write(f"**Response Headers:** {dict(res.headers)}")
-                
-                if res.status_code == 200:
-                    data = res.json()
-                    restaurants = data.get("results", [])
-                    st.write(f"**Found {len(restaurants)} restaurants**")
-                    for i, r in enumerate(restaurants, 1):
-                        st.write(f"{i}. {r.get('name', 'Unknown')} - {r.get('location', {}).get('formatted_address', 'No address')}")
-                else:
-                    st.write(f"**Error Response:** {res.text}")
-                    
-            except Exception as e:
-                st.error(f"Test failed: {str(e)}")
-
-    if st.button("🔍 Search Restaurants"):
+    if st.button("🔍 Search"):
         if not food or not location:
             st.warning("⚠️ Please enter both a food type and location.")
         elif not api_key:
-            st.error("❌ Foursquare API key is missing. Please check your secrets configuration.")
+            st.error("❌ Foursquare API key is missing.")
         else:
             st.session_state.results = None
             st.session_state.df = None
 
             with st.spinner("Searching and analyzing reviews..."):
-                if st.session_state.debug_mode:
-                    st.markdown("### 🔧 Debug Information")
-                    st.write(f"**Food:** '{food}'")
-                    st.write(f"**Location:** '{location}'")
-                    st.write(f"**API Key Present:** {bool(api_key)}")
-                    st.write(f"**API Key Starts With:** {api_key[:10]}..." if api_key else "No API key")
-                
                 headers = {"accept": "application/json", "Authorization": api_key}
-                params = {"query": food, "near": location, "limit": 20, "fields": "fsq_id,name,location"}
-                
-                try:
-                    res = requests.get("https://api.foursquare.com/v3/places/search", 
-                                      headers=headers, params=params, timeout=15)
-                    
-                    if st.session_state.debug_mode:
-                        st.write(f"**Status Code:** {res.status_code}")
-                        st.write(f"**Response Time:** {res.elapsed.total_seconds():.2f}s")
-                    
-                    if res.status_code != 200:
-                        error_msg = f"❌ API Error: {res.status_code} - {res.reason}"
-                        if res.status_code == 401:
-                            error_msg += " (Invalid API Key)"
-                        elif res.status_code == 403:
-                            error_msg += " (Forbidden - check API permissions)"
-                        st.error(error_msg)
-                        
-                        if st.session_state.debug_mode:
-                            st.write(f"**Error Response:** {res.text[:200]}...")
-                        restaurants = []
-                    else:
-                        data = res.json()
-                        restaurants = data.get("results", [])
-                        
-                        if st.session_state.debug_mode:
-                            st.write(f"**Raw API Response:**")
-                            st.json(data)
-                            st.write(f"**Found {len(restaurants)} restaurants**")
-                        
-                        if not restaurants:
-                            st.warning("ℹ️ No restaurants found in the API response. Try a different location or cuisine.")
-                            
-                except requests.exceptions.Timeout:
-                    st.error("⏰ Request timeout. The API is taking too long to respond.")
-                    restaurants = []
-                except requests.exceptions.ConnectionError:
-                    st.error("🔌 Connection error. Please check your internet connection.")
-                    restaurants = []
-                except Exception as e:
-                    st.error(f"❌ Unexpected error: {str(e)}")
-                    restaurants = []
+                params = {"query": food, "near": location, "limit": 20}
+                res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
+                restaurants = res.json().get("results", [])
 
-                # Process restaurants if found
-                if restaurants:
+                if not restaurants:
+                    st.error("❌ No restaurants found. Try different search terms.")
+                else:
                     classifier = get_classifier()
-                    if classifier is None:
-                        st.error("❌ Sentiment analysis model failed to load. Cannot analyze reviews.")
-                        results = []
-                    else:
-                        results = []
-                        progress_bar = st.progress(0)
+                    results = []
+
+                    for r in restaurants:
+                        fsq_id = r['fsq_id']
+                        name = r['name']
+                        address = r['location'].get('formatted_address', 'Unknown')
                         
-                        for i, r in enumerate(restaurants):
-                            fsq_id = r['fsq_id']
-                            name = r['name']
-                            address = r['location'].get('formatted_address', 'Address not available')
-                            
-                            # Create Google Maps link
-                            maps_query = urllib.parse.quote_plus(f"{name}, {address}")
-                            maps_link = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
+                        # Create Google Maps link
+                        maps_query = urllib.parse.quote_plus(f"{name}, {address}")
+                        maps_link = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
 
-                            # Get tips/reviews
-                            tips = []
-                            try:
-                                tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
-                                tips_res = requests.get(tips_url, headers=headers, timeout=10)
-                                if tips_res.status_code == 200:
-                                    tips = tips_res.json()
-                            except:
-                                tips = []
+                        tips_url = f"https://api.foursquare.com/v3/places/{fsq_id}/tips"
+                        tips_res = requests.get(tips_url, headers=headers)
+                        tips = tips_res.json()
+                        review_texts = [tip["text"] for tip in tips[:5]] if tips else []
 
-                            review_texts = [tip["text"] for tip in tips[:5]] if tips else []
+                        sentiments = []
+                        for tip in review_texts:
+                            result = classifier(tip[:512])[0]
+                            stars = int(result["label"].split()[0])
+                            sentiments.append(stars)
 
-                            # Sentiment analysis
-                            sentiments = []
-                            for tip in review_texts:
-                                try:
-                                    result = classifier(tip[:512])[0]
-                                    stars = int(result["label"].split()[0])
-                                    sentiments.append(stars)
-                                except:
-                                    continue
+                        photo_url = ""
+                        photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
+                        photo_res = requests.get(photo_api, headers=headers)
+                        photos = photo_res.json()
+                        if photos:
+                            photo = photos[0]
+                            photo_url = f"{photo['prefix']}original{photo['suffix']}"
 
-                            # Get photos
-                            photo_url = ""
-                            try:
-                                photo_api = f"https://api.foursquare.com/v3/places/{fsq_id}/photos"
-                                photo_res = requests.get(photo_api, headers=headers, timeout=10)
-                                if photo_res.status_code == 200:
-                                    photos = photo_res.json()
-                                    if photos:
-                                        photo = photos[0]
-                                        photo_url = f"{photo['prefix']}original{photo['suffix']}"
-                            except:
-                                pass
+                        avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
 
-                            avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
-
-                            results.append({
-                                "Restaurant": name,
-                                "Address": address,
-                                "Google Maps Link": maps_link,
-                                "Rating": avg_rating,
-                                "Stars": "⭐" * int(round(avg_rating)) if avg_rating > 0 else "No reviews",
-                                "Reviews": len(sentiments),
-                                "Image": photo_url,
-                                "Tips": review_texts[:2] if review_texts else ["No reviews available"]
-                            })
-                            
-                            progress_bar.progress((i + 1) / len(restaurants))
-
-                        progress_bar.empty()
+                        results.append({
+                            "Restaurant": name,
+                            "Address": address,
+                            "Google Maps Link": maps_link,
+                            "Rating": avg_rating,
+                            "Stars": "⭐" * int(round(avg_rating)) if avg_rating > 0 else "No reviews",
+                            "Reviews": len(sentiments),
+                            "Image": photo_url,
+                            "Tips": review_texts[:2] if review_texts else ["No reviews available"]
+                        })
 
                     if results:
                         df = pd.DataFrame([{
@@ -401,36 +274,38 @@ if st.session_state.page == "Recommend":
                         st.session_state.results = results
                         st.session_state.df = df
                     else:
-                        st.warning("No restaurants could be processed successfully.")
-                else:
-                    st.error("❌ No restaurants found. Please try:")
-                    st.write("- Different location (e.g., 'New York' instead of 'NYC')")
-                    st.write("- Broader food category (e.g., 'Italian' instead of 'specific dish')")
-                    st.write("- Check if the location exists on Foursquare")
+                        st.warning("No restaurants found with the given criteria.")
 
-    # Display results if available
     if st.session_state.results:
         st.divider()
         st.subheader("📊 Restaurants Search Results and Ratings")
         st.dataframe(st.session_state.df, use_container_width=True)
 
-        # Analysis Section
+        # ======== ANALYSIS SECTION ========
         st.divider()
         st.subheader("📈 Recommendation Analysis")
         
+        # Create DataFrame from results
         analysis_df = pd.DataFrame(st.session_state.results)
         
+        # Only show analysis if we have ratings
         if analysis_df['Rating'].sum() > 0:
-            tab1, tab2 = st.tabs(["Top Categories", "Review Insights"])
+            # Create tabs for different analysis views
+            tab1, tab2= st.tabs(["Top Categories", "Review Insights"])
+            
             
             with tab1:
+                # Extract categories from food types
                 analysis_df['Category'] = analysis_df['Restaurant'].apply(lambda x: ' '.join([w for w in x.split() if w.isupper() or w.istitle()][:2]))
+                
+                # Group by category
                 category_df = analysis_df.groupby('Category').agg({
                     'Rating': 'mean',
                     'Restaurant': 'count'
                 }).rename(columns={'Restaurant': 'Count'}).sort_values('Rating', ascending=False)
                 
                 if not category_df.empty:
+                    # Category bar chart
                     fig3 = px.bar(category_df.head(10), 
                                  x=category_df.head(10).index,
                                  y='Rating',
@@ -442,10 +317,14 @@ if st.session_state.page == "Recommend":
                     st.warning("No category data available for visualization")
             
             with tab2:
+                # Sentiment analysis of reviews
                 st.markdown("### 💬 Review Sentiment Highlights")
+                
+                # Get all review texts
                 all_reviews = [review for sublist in analysis_df['Tips'] for review in sublist if review != "No reviews available"]
                 
                 if all_reviews:
+                    # Show word cloud of common terms
                     text = ' '.join(all_reviews)
                     wordcloud = WordCloud(width=800, height=400, background_color='black').generate(text)
                     
@@ -454,14 +333,18 @@ if st.session_state.page == "Recommend":
                     plt.axis("off")
                     st.pyplot(plt)
                     
+                    # Show longest reviews
                     st.markdown("### 📝 Longest Reviews")
                     longest_reviews = sorted(all_reviews, key=len, reverse=True)[:3]
                     for i, review in enumerate(longest_reviews, 1):
                         st.markdown(f"{i}. {review[:300]}..." if len(review) > 300 else f"{i}. {review}")
                 else:
                     st.warning("No reviews available for analysis")
+        else:
+            st.info("No rating data available for analysis in current search results")
 
-        # Top Picks Section
+        # ======== CONTINUE WITH EXISTING CODE ========
+        # Filter out restaurants with zero reviews for top picks
         reviewed_restaurants = [r for r in st.session_state.results if r["Reviews"] > 0]
         top3 = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:3] if reviewed_restaurants else []
         
@@ -488,29 +371,29 @@ if st.session_state.page == "Recommend":
                         </div>
                     """, unsafe_allow_html=True)
 
-        # Gallery Section
+        # Gallery Pick Section
         st.divider()
         st.subheader("🖼️ Gallery Pick")
+
+        # Filter out restaurants without images
         restaurants_with_images = [r for r in st.session_state.results if r["Image"]]
         
-        if restaurants_with_images:
-            gallery_cols = st.columns(3)
-            for idx, r in enumerate(sorted(restaurants_with_images, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
-                with gallery_cols[idx % 3]:
-                    st.markdown(f"""
-                        <div class="gallery-img-container">
-                            <img src="{r['Image']}" class="gallery-img" />
-                        </div>
-                        <div class="gallery-caption">
-                            <strong>{r['Restaurant']}</strong><br>
-                            {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
-                            <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
-                        </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("No restaurant images available for gallery display.")
+        # Create columns for the gallery
+        gallery_cols = st.columns(3)
+        
+        for idx, r in enumerate(sorted(restaurants_with_images, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
+            with gallery_cols[idx % 3]:
+                st.markdown(f"""
+                    <div class="gallery-img-container">
+                        <img src="{r['Image']}" class="gallery-img" />
+                    </div>
+                    <div class="gallery-caption">
+                        <strong>{r['Restaurant']}</strong><br>
+                        {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
+                        <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
+                    </div>
+                """, unsafe_allow_html=True)
 
-        # Top Pick Metric
         st.divider()
         if reviewed_restaurants:
             top = max(reviewed_restaurants, key=lambda x: x["Rating"])
@@ -528,7 +411,6 @@ if st.session_state.page == "Recommend":
         else:
             st.warning("No restaurants with reviews found to select a top pick.")
 
-        # Restaurant Highlights
         st.divider()
         st.subheader("📸 Restaurant Highlights")
 
@@ -537,7 +419,7 @@ if st.session_state.page == "Recommend":
             with cols[idx % 2]:
                 st.markdown(f"### {r['Restaurant']}")
                 st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"[📍 locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
+                st.markdown(f"[locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
                 st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
                 if r["Image"]:
                     st.markdown(f"""
@@ -574,9 +456,12 @@ elif st.session_state.page == "History":
     if not history_data:
         st.info("No history available yet. Try making some recommendations first!")
     else:
+        # Convert to DataFrame for nice display
         df_hist = pd.DataFrame(history_data)
+        # Remove internal fields
         df_hist = df_hist.drop(columns=['id', 'timestamp'], errors='ignore')
         
+        # Add map links if they exist in the data
         if 'Google Maps Link' in df_hist.columns:
             df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
         
