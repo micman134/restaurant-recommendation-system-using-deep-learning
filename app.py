@@ -9,6 +9,7 @@ import urllib.parse
 import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
+import time
 
 # --------- PAGE CONFIGURATION ---------
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -51,6 +52,13 @@ st.markdown("""
 .stTabs [data-baseweb="tab-list"] { gap: 10px; }
 .stTabs [data-baseweb="tab"] { padding: 8px 16px; border-radius: 8px 8px 0 0; }
 .stTabs [aria-selected="true"] { background-color: #4CAF50; color: white; }
+.restaurant-card {
+    background: white;
+    border-radius: 15px;
+    padding: 15px;
+    margin: 10px 0;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -83,10 +91,11 @@ db = firestore.client()
 def get_google_image(search_query):
     """Get image from Google Custom Search API"""
     GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
-    GOOGLE_CSE_ID = st.secrets.get("CX", "")
+    GOOGLE_CSE_ID = st.secrets.get("GOOGLE_CSE_ID", "")
     
     if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        return ""
+        st.warning("Google API keys not configured. Using placeholder images.")
+        return "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop"
     
     try:
         # Search for restaurant images
@@ -94,10 +103,12 @@ def get_google_image(search_query):
         params = {
             "key": GOOGLE_API_KEY,
             "cx": GOOGLE_CSE_ID,
-            "q": search_query,
+            "q": f"{search_query} restaurant food",
             "searchType": "image",
             "num": 1,
-            "safe": "active"
+            "safe": "active",
+            "imgSize": "medium",
+            "imgType": "photo"
         }
         
         response = requests.get(url, params=params, timeout=10)
@@ -105,10 +116,13 @@ def get_google_image(search_query):
             data = response.json()
             if "items" in data and len(data["items"]) > 0:
                 return data["items"][0]["link"]
+        else:
+            st.error(f"Google API error: {response.status_code}")
     except Exception as e:
         st.error(f"Google API error: {e}")
     
-    return ""
+    # Fallback to placeholder image
+    return "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop"
 
 # --------- FIRESTORE FUNCTIONS ---------
 def read_history():
@@ -211,7 +225,7 @@ if st.session_state.page == "Recommend":
                             sentiments = [int(classifier(tip[:512])[0]["label"].split()[0]) for tip in review_texts]
 
                             # Get image from Google Custom Search instead of Foursquare
-                            search_query = f"{name} restaurant {location}"
+                            search_query = f"{name} {location}"
                             photo_url = get_google_image(search_query)
 
                             avg_rating = round(sum(sentiments)/len(sentiments),2) if sentiments else 0
@@ -248,31 +262,46 @@ if st.session_state.page == "Recommend":
 
         st.divider()
         st.subheader("🏅 AI Top Picks")
-        cols = st.columns(3)
-        medals = ["🥇 1st","🥈 2nd","🥉 3rd"]
-        colors = ["#FFD700","#C0C0C0","#CD7F32"]
-        for i,(col,medal,color) in enumerate(zip(cols,medals,colors)):
-            if i<len(top3):
-                r = top3[i]
-                with col:
-                    # Display image if available
-                    if r["Image"]:
-                        st.image(r["Image"], use_column_width=True, caption=r["Restaurant"])
-                    
-                    st.markdown(f"""
-                    <div style="background-color:{color}; border-radius:15px; padding:20px; text-align:center; color:black; font-weight:bold;">
-                        <div style="font-size:22px; margin-bottom:10px;">{medal}</div>
-                        <div style="font-size:18px; margin-bottom:8px;">{r['Restaurant']}</div>
-                        <div style="font-size:15px; margin-bottom:8px;">{r['Address']}</div>
-                        <div style="font-size:16px;">{r['Stars']} ({r['Rating']})</div>
-                        <div style="margin-top:10px;">
-                            <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-        # Append top pick to Firebase
+        
         if top3:
+            cols = st.columns(3)
+            medals = ["🥇 1st","🥈 2nd","🥉 3rd"]
+            colors = ["#FFD700","#C0C0C0","#CD7F32"]
+            
+            for i, (col, medal, color) in enumerate(zip(cols, medals, colors)):
+                if i < len(top3):
+                    r = top3[i]
+                    with col:
+                        # Display image
+                        try:
+                            st.image(
+                                r["Image"], 
+                                use_column_width=True, 
+                                caption=r["Restaurant"],
+                                output_format="auto"
+                            )
+                        except Exception as e:
+                            st.error(f"Could not load image: {e}")
+                            st.image(
+                                "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop",
+                                use_column_width=True,
+                                caption="Default restaurant image"
+                            )
+                        
+                        # Restaurant info card
+                        st.markdown(f"""
+                        <div style="background-color:{color}; border-radius:15px; padding:20px; text-align:center; color:black; font-weight:bold;">
+                            <div style="font-size:22px; margin-bottom:10px;">{medal}</div>
+                            <div style="font-size:18px; margin-bottom:8px;">{r['Restaurant']}</div>
+                            <div style="font-size:15px; margin-bottom:8px;">{r['Address']}</div>
+                            <div style="font-size:16px;">{r['Stars']} ({r['Rating']})</div>
+                            <div style="margin-top:10px;">
+                                <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # Append top pick to Firebase
             top_pick = {
                 "Restaurant": top3[0]["Restaurant"],
                 "Rating": top3[0]["Rating"],
@@ -282,6 +311,8 @@ if st.session_state.page == "Recommend":
                 "Location": location
             }
             append_history(top_pick)
+        else:
+            st.info("No restaurants with reviews found. Try a different search.")
 
 # --------- DEEP LEARNING PAGE ---------
 elif st.session_state.page == "Deep Learning":
