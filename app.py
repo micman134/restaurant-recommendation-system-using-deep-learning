@@ -164,7 +164,7 @@ if st.session_state.page == "Recommend":
 
                         # Fetch tips
                         try:
-                            tips_res = requests.get(f"https://api.foursquare.com/v3/places/{fsq_id}/tips", headers=headers)
+                            tips_res = requests.get(f"https://places-api.foursquare.com/places/{fsq_place_id}/tips", headers=headers)
                             tips_data = tips_res.json() if tips_res.status_code == 200 else []
                         except: tips_data = []
                         review_texts = [tip.get("text","") for tip in tips_data[:5]] if tips_data else []
@@ -174,7 +174,7 @@ if st.session_state.page == "Recommend":
                         # Fetch photo (fallback: Google Images)
                         photo_url = ""
                         try:
-                            photo_res = requests.get(f"https://api.foursquare.com/v3/places/{fsq_id}/photos", headers=headers)
+                            photo_res = requests.get(f"https://places-api.foursquare.com/v3/places/{fsq_place_id}/photos", headers=headers)
                             photos = photo_res.json() if photo_res.status_code == 200 else []
                             if photos: photo_url = f"{photos[0]['prefix']}original{photos[0]['suffix']}"
                         except: pass
