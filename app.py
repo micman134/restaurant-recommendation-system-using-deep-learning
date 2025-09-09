@@ -157,7 +157,7 @@ if st.session_state.page == "Recommend":
                 else:
                     results = []
                     for r in restaurants:
-                        fsq_id = r['fsq_id']
+                        fsq_id = r['fsq_place_id']
                         name = r['name']
                         address = r['location'].get('formatted_address', 'Unknown')
                         maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(name+', '+address)}"
