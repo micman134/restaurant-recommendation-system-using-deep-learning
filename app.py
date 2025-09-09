@@ -212,7 +212,7 @@ if st.session_state.page == "Recommend":
             with st.spinner("Searching and analyzing reviews..."):
                 headers = {"accept": "application/json", "Authorization": api_key}
                 params = {"query": food, "near": location, "limit": 20}
-                res = requests.get("https://api.foursquare.com/places/search", headers=headers, params=params)
+                res = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params)
                 restaurants = res.json().get("results", [])
 
                 if not restaurants:
@@ -230,7 +230,7 @@ if st.session_state.page == "Recommend":
                         maps_query = urllib.parse.quote_plus(f"{name}, {address}")
                         maps_link = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
 
-                        tips_url = f"https://api.foursquare.com/places/{fsq_id}/tips"
+                        tips_url = f"https://places-api.foursquare.com/places/{fsq_id}/tips"
                         tips_res = requests.get(tips_url, headers=headers)
                         tips = tips_res.json()
                         review_texts = [tip["text"] for tip in tips[:5]] if tips else []
@@ -242,7 +242,7 @@ if st.session_state.page == "Recommend":
                             sentiments.append(stars)
 
                         photo_url = ""
-                        photo_api = f"https://api.foursquare.com/places/{fsq_id}/photos"
+                        photo_api = f"https://places-api.foursquare.com/places/{fsq_id}/photos"
                         photo_res = requests.get(photo_api, headers=headers)
                         photos = photo_res.json()
                         if photos:
