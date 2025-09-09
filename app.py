@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 # ---------- CONFIG ----------
 FOURSQUARE_KEY = st.secrets.get("FOURSQUARE_API_KEY")
 GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY")
-GOOGLE_CX = st.secrets.get("GOOGLE_CX")  # Custom Search Engine ID
+GOOGLE_CX = st.secrets.get("CX")  # Custom Search Engine ID
 
 HEADERS = {
     "Accept": "application/json",
