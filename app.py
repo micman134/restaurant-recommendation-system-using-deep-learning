@@ -10,72 +10,58 @@ import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 
-# ---------- CONFIG ----------
-FOURSQUARE_KEY = st.secrets.get("FOURSQUARE_API_KEY")
-GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY")
-GOOGLE_CX = st.secrets.get("CX")  # Custom Search Engine ID
+# --------- PAGE CONFIGURATION ---------
+st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
 
-HEADERS = {
-    "Accept": "application/json",
-    "Authorization": f"Bearer {FOURSQUARE_KEY}",
-    "X-Places-Api-Version": "2025-06-17"
+# --------- CSS STYLING ---------
+st.markdown("""
+<style>
+.stApp {
+    background-image: url("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4");
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
 }
+.stApp:before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 0;
+}
+#MainMenu, footer, header {visibility: hidden;}
+.custom-footer {
+    text-align: center;
+    font-size: 14px;
+    margin-top: 50px;
+    padding: 20px;
+    color: #aaa;
+}
+.gallery-img-container {
+    width: 100%;
+    height: 250px;
+    overflow: hidden;
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+.gallery-img { width: 100%; height: 100%; object-fit: cover; }
+.gallery-caption { text-align: center; margin-top: 5px; }
+.map-link { color: #4CAF50 !important; text-decoration: none; font-weight: bold; }
+.map-link:hover { text-decoration: underline; }
+.stTabs [data-baseweb="tab-list"] { gap: 10px; }
+.stTabs [data-baseweb="tab"] { padding: 8px 16px; border-radius: 8px 8px 0 0; }
+.stTabs [aria-selected="true"] { background-color: #4CAF50; color: white; }
+</style>
+""", unsafe_allow_html=True)
 
-# ---------- FOURSQUARE HELPERS ----------
-def search_places_fs(query, near, limit=10):
-    url = "https://places-api.foursquare.com/places/search"
-    params = {"query": query, "near": near, "limit": limit}
-    res = requests.get(url, headers=HEADERS, params=params)
-    if res.status_code == 200:
-        return res.json().get("results", [])
-    return []
-
-def get_tips_fs(fsq_id, limit=5):
-    url = f"https://places-api.foursquare.com/places/{fsq_id}/tips"
-    res = requests.get(url, headers=HEADERS)
-    if res.status_code == 200:
-        tips = res.json()
-        return [tip.get("text", "") for tip in tips[:limit]]
-    return []
-
-def get_photos_fs(fsq_id, limit=1):
-    url = f"https://places-api.foursquare.com/places/{fsq_id}/photos"
-    res = requests.get(url, headers=HEADERS)
-    if res.status_code == 200:
-        photos = res.json()
-        return [f"{p['prefix']}original{p['suffix']}" for p in photos[:limit]]
-    return []
-
-# ---------- GOOGLE IMAGE SEARCH ----------
-def get_google_image(query):
-    if not GOOGLE_API_KEY or not GOOGLE_CX:
-        return ""
-    url = f"https://www.googleapis.com/customsearch/v1"
-    params = {
-        "q": query,
-        "cx": GOOGLE_CX,
-        "searchType": "image",
-        "num": 1,
-        "key": GOOGLE_API_KEY
-    }
-    res = requests.get(url, params=params)
-    if res.status_code == 200:
-        items = res.json().get("items", [])
-        if items:
-            return items[0].get("link", "")
-    return ""
-
-# ---------- AI GENERATED REVIEW ----------
-def generate_review(fsq_name):
-    # Simple prompt for sentiment/description using HuggingFace pipeline
-    return f"{fsq_name} is a highly recommended place with great food and excellent service."
-
-# ---------- SENTIMENT MODEL ----------
+# --------- SENTIMENT MODEL ---------
 @st.cache_resource(show_spinner=False)
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
-# ---------- FIREBASE ----------
+classifier = get_classifier()
+
+# --------- FIREBASE INITIALIZATION ---------
 if not firebase_admin._apps:
     cred = credentials.Certificate({
         "type": st.secrets["firebase"]["type"],
@@ -90,87 +76,219 @@ if not firebase_admin._apps:
         "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"]
     })
     firebase_admin.initialize_app(cred)
+
 db = firestore.client()
 
-def append_history(data_dict):
+# --------- FIRESTORE FUNCTIONS ---------
+def read_history():
     try:
+        docs = db.collection("recommendations").stream()
+        history_data = []
+        for doc in docs:
+            data = doc.to_dict()
+            data["id"] = doc.id
+            history_data.append(data)
+        return history_data
+    except Exception as e:
+        st.error(f"Error reading from Firebase: {e}")
+        return []
+
+def append_history(data_dict):
+    food = data_dict.get("Food", "").strip()
+    location = data_dict.get("Location", "").strip()
+    if not food or not location:
+        return
+    try:
+        # Check duplicate
+        docs = db.collection("recommendations") \
+                 .where("Restaurant", "==", data_dict.get("Restaurant")) \
+                 .where("Food", "==", food) \
+                 .where("Location", "==", location) \
+                 .stream()
+        if len(list(docs)) > 0:
+            return
         data_dict["timestamp"] = datetime.now()
         db.collection("recommendations").add(data_dict)
     except Exception as e:
         st.error(f"Error saving to Firebase: {e}")
 
-# ---------- STREAMLIT UI ----------
-st.title("🍽️ AI Restaurant Recommender (Foursquare + Google Images)")
+# --------- SESSION STATE ---------
+if "page" not in st.session_state:
+    st.session_state.page = "Recommend"
 
-food = st.text_input("🍕 Food Type", placeholder="Sushi, Pizza...")
-location = st.text_input("📍 Location", placeholder="Lagos, Nigeria")
+# --------- SIDEBAR ---------
+with st.sidebar:
+    st.markdown("## 🍽️ Menu")
+    if st.button("Recommend"): st.session_state.page = "Recommend"
+    if st.button("Deep Learning"): st.session_state.page = "Deep Learning"
+    if st.button("History"): st.session_state.page = "History"
+    if st.button("About"): st.session_state.page = "About"
 
-if st.button("🔍 Search"):
-    if not food or not location:
-        st.warning("Enter both food type and location.")
-    else:
-        classifier = get_classifier()
-        results = []
+# --------- RECOMMEND PAGE ---------
+if st.session_state.page == "Recommend":
+    st.title("🍽️ AI Restaurant Recommender")
+    st.markdown("Find top-rated restaurants using **Foursquare** and **AI sentiment analysis**.")
 
-        # Search Foursquare
-        fs_places = search_places_fs(food, location, limit=20)
+    if "results" not in st.session_state:
+        st.session_state.results = None
+        st.session_state.df = None
 
-        for p in fs_places:
-            fsq_id = p.get("fsq_id")
-            name = p.get("name")
-            address = ", ".join(p.get("location", {}).get("formatted_address", [])) or "Unknown"
-            maps_link = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote_plus(name + ' ' + address)}"
+    food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
+    location = st.text_input("📍 Location", placeholder="e.g., Lagos, Nigeria")
 
-            # Get tips / reviews
-            tips = get_tips_fs(fsq_id)
-            if not tips:
-                tips = [generate_review(name)]
+    SERVICE_KEY = st.secrets.get("FOURSQUARE_SERVICE_KEY", "")
+    if st.button("🔍 Search"):
+        if not food or not location:
+            st.warning("⚠️ Enter both food type and location.")
+        elif not SERVICE_KEY:
+            st.error("❌ Foursquare Service Key is missing.")
+        else:
+            st.session_state.results = None
+            st.session_state.df = None
+            with st.spinner("Searching and analyzing reviews..."):
+                headers = {
+                    "Accept": "application/json",
+                    "Authorization": f"Bearer {SERVICE_KEY}",
+                    "X-Places-Api-Version": "2025-06-17"
+                }
+                params = {"query": food, "near": location, "limit": 20}
+                res = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params)
+                if res.status_code != 200:
+                    st.error(f"❌ Foursquare API error: {res.status_code} {res.text}")
+                else:
+                    restaurants = res.json().get("results", [])
+                    if not restaurants:
+                        st.error("❌ No restaurants found. Try different search terms.")
+                    else:
+                        results = []
+                        for r in restaurants:
+                            fsq_id = r['fsq_place_id']
+                            name = r['name']
+                            address = r['location'].get('formatted_address', 'Unknown')
+                            maps_query = urllib.parse.quote_plus(f"{name}, {address}")
+                            maps_link = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
 
-            # Sentiment scoring
-            sentiments = [int(classifier(t[:512])[0]["label"].split()[0]) for t in tips]
-            avg_rating = round(sum(sentiments)/len(sentiments), 2) if sentiments else 0
+                            # Tips
+                            try:
+                                tips_res = requests.get(f"https://places-api.foursquare.com/places/{fsq_id}/tips", headers=headers)
+                                tips_data = tips_res.json() if tips_res.status_code == 200 else []
+                            except:
+                                tips_data = []
+                            review_texts = [tip.get("text","") for tip in tips_data[:5]] if tips_data else []
 
-            # Get image from Foursquare first, fallback to Google
-            photos = get_photos_fs(fsq_id)
-            image_url = photos[0] if photos else get_google_image(f"{name} restaurant {location}")
+                            # Sentiment
+                            sentiments = [int(classifier(tip[:512])[0]["label"].split()[0]) for tip in review_texts]
 
-            results.append({
-                "Restaurant": name,
-                "Address": address,
-                "Google Maps Link": maps_link,
-                "Rating": avg_rating,
-                "Stars": "⭐"*int(round(avg_rating)) if avg_rating>0 else "No reviews",
-                "Reviews": len(sentiments),
-                "Image": image_url,
-                "Tips": tips[:3]
-            })
+                            # Photos
+                            try:
+                                photo_res = requests.get(f"https://places-api.foursquare.com/places/{fsq_id}/photos", headers=headers)
+                                photos = photo_res.json() if photo_res.status_code == 200 else []
+                            except:
+                                photos = []
+                            photo_url = f"{photos[0]['prefix']}original{photos[0]['suffix']}" if photos else ""
 
-        if results:
-            df = pd.DataFrame([{
-                "Restaurant": r["Restaurant"],
-                "Address": r["Address"],
-                "Average Rating": r["Rating"],
-                "Stars": r["Stars"],
-                "Reviews": r["Reviews"]
-            } for r in results])
-            df.index += 1
-            st.dataframe(df, use_container_width=True)
+                            avg_rating = round(sum(sentiments)/len(sentiments),2) if sentiments else 0
+                            results.append({
+                                "Restaurant": name,
+                                "Address": address,
+                                "Google Maps Link": maps_link,
+                                "Rating": avg_rating,
+                                "Stars": "⭐"*int(round(avg_rating)) if avg_rating>0 else "No reviews",
+                                "Reviews": len(sentiments),
+                                "Image": photo_url,
+                                "Tips": review_texts[:2] if review_texts else ["No reviews available"]
+                            })
 
-            # Top pick
-            top = max(results, key=lambda x: x["Rating"])
-            st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
-            append_history({
-                "Restaurant": top["Restaurant"],
-                "Rating": top["Rating"],
-                "Address": top["Address"],
-                "Google Maps Link": top["Google Maps Link"],
+                        st.session_state.results = results
+                        st.session_state.df = pd.DataFrame([{
+                            "Restaurant": r["Restaurant"],
+                            "Address": r["Address"],
+                            "Average Rating": r["Rating"],
+                            "Stars": r["Stars"],
+                            "Reviews": r["Reviews"]
+                        } for r in results])
+                        st.session_state.df.index += 1
+
+    # Display results
+    if st.session_state.results:
+        st.divider()
+        st.subheader("📊 Restaurants Search Results")
+        st.dataframe(st.session_state.df, use_container_width=True)
+
+        # Top 3 AI Picks
+        reviewed = [r for r in st.session_state.results if r["Reviews"]>0]
+        top3 = sorted(reviewed, key=lambda x:x["Rating"], reverse=True)[:3] if reviewed else []
+
+        st.divider()
+        st.subheader("🏅 AI Top Picks")
+        cols = st.columns(3)
+        medals = ["🥇 1st","🥈 2nd","🥉 3rd"]
+        colors = ["#FFD700","#C0C0C0","#CD7F32"]
+        for i,(col,medal,color) in enumerate(zip(cols,medals,colors)):
+            if i<len(top3):
+                r = top3[i]
+                with col:
+                    st.markdown(f"""
+                    <div style="background-color:{color}; border-radius:15px; padding:20px; text-align:center; color:black; font-weight:bold;">
+                        <div style="font-size:22px; margin-bottom:10px;">{medal}</div>
+                        <div style="font-size:18px; margin-bottom:8px;">{r['Restaurant']}</div>
+                        <div style="font-size:15px; margin-bottom:8px;">{r['Address']}</div>
+                        <div style="font-size:16px;">{r['Stars']} ({r['Rating']})</div>
+                        <div style="margin-top:10px;">
+                            <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+        # Append top pick to Firebase
+        if top3:
+            top_pick = {
+                "Restaurant": top3[0]["Restaurant"],
+                "Rating": top3[0]["Rating"],
+                "Address": top3[0]["Address"],
+                "Google Maps Link": top3[0]["Google Maps Link"],
                 "Food": food,
                 "Location": location
-            })
+            }
+            append_history(top_pick)
 
-            # Gallery
-            st.subheader("🖼️ Gallery Picks")
-            cols = st.columns(3)
-            for idx, r in enumerate(sorted(results, key=lambda x: x["Rating"], reverse=True)):
-                with cols[idx%3]:
-                    st.image(r["Image"], caption=f"{r['Restaurant']} ({r['Stars']})")
+# --------- DEEP LEARNING PAGE ---------
+elif st.session_state.page == "Deep Learning":
+    st.title("🤖 Deep Learning Explained")
+    st.markdown("""
+    This app uses **BERT sentiment analysis** to evaluate restaurant reviews and recommend the best places.
+
+    ### Workflow:
+    - Search nearby restaurants using **Foursquare API**.
+    - Retrieve user reviews ("tips") and photos.
+    - Analyze sentiment using **BERT model**.
+    - Rank restaurants and show top recommendations.
+    """)
+
+# --------- HISTORY PAGE ---------
+elif st.session_state.page == "History":
+    st.title("📚 Recommendation History")
+    history_data = read_history()
+    if not history_data:
+        st.info("No history yet. Make some recommendations!")
+    else:
+        df_hist = pd.DataFrame(history_data).drop(columns=['id','timestamp'], errors='ignore')
+        if 'Google Maps Link' in df_hist.columns:
+            df_hist['Map'] = df_hist['Google Maps Link'].apply(lambda x: f"[📍 View on Map]({x})")
+        df_hist.index += 1
+        st.dataframe(df_hist, use_container_width=True)
+
+# --------- ABOUT PAGE ---------
+elif st.session_state.page == "About":
+    st.title("ℹ️ About This App")
+    st.markdown("""
+    **AI Restaurant Recommender** helps you find top restaurants using:
+
+    - Foursquare API for places and reviews
+    - BERT sentiment analysis
+    - Firebase Firestore for history tracking
+    - Google Maps links for navigation
+    """)
+
+# --------- FOOTER ---------
+st.markdown('<div class="custom-footer">© 2025 AI Restaurant Recommender</div>', unsafe_allow_html=True)
