@@ -79,6 +79,37 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
+# --------- GOOGLE CUSTOM SEARCH API FUNCTION ---------
+def get_google_image(search_query):
+    """Get image from Google Custom Search API"""
+    GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
+    GOOGLE_CSE_ID = st.secrets.get("CX", "")
+    
+    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
+        return ""
+    
+    try:
+        # Search for restaurant images
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": GOOGLE_API_KEY,
+            "cx": GOOGLE_CSE_ID,
+            "q": search_query,
+            "searchType": "image",
+            "num": 1,
+            "safe": "active"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if "items" in data and len(data["items"]) > 0:
+                return data["items"][0]["link"]
+    except Exception as e:
+        st.error(f"Google API error: {e}")
+    
+    return ""
+
 # --------- FIRESTORE FUNCTIONS ---------
 def read_history():
     try:
@@ -179,13 +210,9 @@ if st.session_state.page == "Recommend":
                             # Sentiment
                             sentiments = [int(classifier(tip[:512])[0]["label"].split()[0]) for tip in review_texts]
 
-                            # Photos
-                            try:
-                                photo_res = requests.get(f"https://places-api.foursquare.com/places/{fsq_id}/photos", headers=headers)
-                                photos = photo_res.json() if photo_res.status_code == 200 else []
-                            except:
-                                photos = []
-                            photo_url = f"{photos[0]['prefix']}original{photos[0]['suffix']}" if photos else ""
+                            # Get image from Google Custom Search instead of Foursquare
+                            search_query = f"{name} restaurant {location}"
+                            photo_url = get_google_image(search_query)
 
                             avg_rating = round(sum(sentiments)/len(sentiments),2) if sentiments else 0
                             results.append({
@@ -228,6 +255,10 @@ if st.session_state.page == "Recommend":
             if i<len(top3):
                 r = top3[i]
                 with col:
+                    # Display image if available
+                    if r["Image"]:
+                        st.image(r["Image"], use_column_width=True, caption=r["Restaurant"])
+                    
                     st.markdown(f"""
                     <div style="background-color:{color}; border-radius:15px; padding:20px; text-align:center; color:black; font-weight:bold;">
                         <div style="font-size:22px; margin-bottom:10px;">{medal}</div>
@@ -288,6 +319,7 @@ elif st.session_state.page == "About":
     - BERT sentiment analysis
     - Firebase Firestore for history tracking
     - Google Maps links for navigation
+    - Google Custom Search API for restaurant images
     """)
 
 # --------- FOOTER ---------
