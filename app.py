@@ -147,7 +147,7 @@ db = firestore.client()
 def get_google_image(search_query):
     """Get image from Google Custom Search API"""
     GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
-    GOOGLE_CSE_ID = st.secrets.get("GOOGLE_CSE_ID", "")
+    GOOGLE_CSE_ID = st.secrets.get("CX", "")
     
     if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
         st.warning("Google API keys not configured. Using placeholder images.")
