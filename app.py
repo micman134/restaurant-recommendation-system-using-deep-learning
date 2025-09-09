@@ -116,6 +116,15 @@ st.markdown("""
 def get_classifier():
     return pipeline("sentiment-analysis", model="nlptown/bert-base-multilingual-uncased-sentiment")
 
+# Load text generation model for reviews
+@st.cache_resource(show_spinner=False)
+def get_text_generator():
+    try:
+        # Using a smaller, faster model for text generation
+        return pipeline("text-generation", model="distilgpt2", truncation=True)
+    except:
+        return None
+
 # Initialize Firebase
 if not firebase_admin._apps:
     cred = credentials.Certificate({
@@ -134,80 +143,144 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --------- IMAGE SERVICE FUNCTIONS ---------
-def get_restaurant_image(restaurant_name, location, food_type):
-    """Get restaurant image from various fallback services"""
-    # List of restaurant-related Unsplash search terms
-    restaurant_terms = [
-        "restaurant", "food", "dining", "cuisine", "meal", 
-        "eating", "chef", "kitchen", "menu", "dishes"
-    ]
+# --------- GOOGLE IMAGES API FUNCTION ---------
+def get_google_image(search_query):
+    """Get image from Google Custom Search API"""
+    GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
+    GOOGLE_CSE_ID = st.secrets.get("GOOGLE_CSE_ID", "")
     
-    # Use Unsplash as primary image source (no API key needed)
-    search_terms = [restaurant_name, food_type, random.choice(restaurant_terms)]
-    random.shuffle(search_terms)
-    query = ",".join(search_terms[:2])
+    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
+        st.warning("Google API keys not configured. Using placeholder images.")
+        return f"https://source.unsplash.com/400x300/?restaurant,{search_query.replace(' ', ',')}"
     
-    # Use different Unsplash endpoints for variety
-    unsplash_options = [
-        f"https://source.unsplash.com/400x300/?{query}",
-        f"https://source.unsplash.com/featured/400x300/?{query}",
-        f"https://source.unsplash.com/random/400x300/?{query}"
-    ]
+    try:
+        # Search for restaurant images using Google Custom Search API
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {
+            "key": GOOGLE_API_KEY,
+            "cx": GOOGLE_CSE_ID,
+            "q": f"{search_query} restaurant food interior",
+            "searchType": "image",
+            "num": 1,
+            "safe": "active",
+            "imgSize": "medium",
+            "imgType": "photo",
+            "rights": "cc_publicdomain"
+        }
+        
+        response = requests.get(url, params=params, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if "items" in data and len(data["items"]) > 0:
+                return data["items"][0]["link"]
+        else:
+            st.error(f"Google API error: {response.status_code}")
+    except Exception as e:
+        st.error(f"Google API error: {e}")
     
-    return random.choice(unsplash_options)
+    # Fallback to Unsplash if Google API fails
+    return f"https://source.unsplash.com/400x300/?restaurant,{search_query.replace(' ', ',')}"
 
-# --------- REVIEW GENERATION FUNCTION ---------
-def generate_reviews(restaurant_name, food_type, rating):
-    """Generate 5 realistic reviews based on restaurant rating"""
+# --------- REVIEW GENERATION WITH LOCAL AI MODEL ---------
+def generate_ai_reviews(restaurant_name, food_type, rating, num_reviews):
+    """Generate realistic reviews using local AI model"""
+    reviews = []
+    text_generator = get_text_generator()
+    
+    if text_generator is None:
+        # Fallback to template-based reviews if AI model fails
+        return generate_template_reviews(restaurant_name, food_type, rating, num_reviews)
+    
+    try:
+        for i in range(num_reviews):
+            # Create different prompts based on rating
+            if rating >= 4.0:
+                prompt = f"Write a positive restaurant review for {restaurant_name} that serves {food_type}:"
+            elif rating >= 3.0:
+                prompt = f"Write a mixed review for {restaurant_name} that serves {food_type}:"
+            else:
+                prompt = f"Write a negative review for {restaurant_name} that serves {food_type}:"
+            
+            # Generate review with AI
+            generated = text_generator(
+                prompt,
+                max_length=100,
+                num_return_sequences=1,
+                temperature=0.8,
+                do_sample=True,
+                pad_token_id=50256
+            )
+            
+            review_text = generated[0]['generated_text'].replace(prompt, '').strip()
+            if review_text:
+                reviews.append(review_text)
+            else:
+                # Fallback if AI generation fails
+                reviews.append(f"Good food and service at {restaurant_name}.")
+                
+    except Exception as e:
+        st.error(f"AI review generation failed: {e}")
+        return generate_template_reviews(restaurant_name, food_type, rating, num_reviews)
+    
+    return reviews
+
+def generate_template_reviews(restaurant_name, food_type, rating, num_reviews):
+    """Fallback template-based review generation"""
     reviews = []
     
     # Review templates based on rating
     if rating >= 4.0:
-        # Positive reviews
         templates = [
             f"Absolutely amazing {food_type.lower()}! {restaurant_name} has the best in town.",
             f"Five stars for {restaurant_name}! The {food_type.lower()} was perfection.",
             f"Exceptional dining experience. The {food_type.lower()} melted in my mouth.",
-            f"{restaurant_name} never disappoints. Their {food_type.lower()} is always fresh and delicious.",
-            f"Top-notch service and incredible {food_type.lower()}. Will definitely be back!"
+            f"{restaurant_name} never disappoints. Their {food_type.lower()} is always fresh.",
+            f"Top-notch service and incredible {food_type.lower()}. Will definitely be back!",
+            f"The ambiance at {restaurant_name} is perfect for enjoying {food_type.lower()}.",
+            f"Highly recommend {restaurant_name} for their excellent {food_type.lower()}.",
+            f"Best {food_type.lower()} I've had in a long time at {restaurant_name}."
         ]
     elif rating >= 3.0:
-        # Mixed reviews
         templates = [
             f"Good {food_type.lower()} at {restaurant_name}, but room for improvement.",
             f"Solid choice for {food_type.lower()}. Service was friendly but a bit slow.",
             f"Decent experience. The {food_type.lower()} was good but not exceptional.",
-            f"{restaurant_name} has potential. The {food_type.lower()} was tasty but portions small.",
-            f"Average visit. The {food_type.lower()} was okay, nothing special."
+            f"{restaurant_name} has potential. The {food_type.lower()} was tasty.",
+            f"Average visit. The {food_type.lower()} was okay, nothing special.",
+            f"Reasonable prices for {food_type.lower()} at {restaurant_name}.",
+            f"Would visit again for the {food_type.lower()} but service could be better."
         ]
     else:
-        # Negative reviews
         templates = [
             f"Disappointing {food_type.lower()} at {restaurant_name}. Expected better.",
             f"Not impressed. The {food_type.lower()} was bland and overpriced.",
             f"{restaurant_name} needs improvement. The {food_type.lower()} was not fresh.",
             f"Poor experience. Service was slow and {food_type.lower()} was cold.",
-            f"Would not recommend. The {food_type.lower()} was below average."
+            f"Would not recommend. The {food_type.lower()} was below average.",
+            f"Very disappointed with the {food_type.lower()} quality at {restaurant_name}."
         ]
     
-    # Generate 5 unique reviews
-    for i in range(5):
-        review = random.choice(templates)
-        # Add some variety by modifying the review slightly
-        modifiers = [
-            " The atmosphere was lovely.",
-            " Great presentation!",
-            " Very reasonable prices.",
-            " Perfect for a casual dinner.",
-            " Highly recommended!",
-            " Could use more seasoning.",
-            " Portions were generous.",
-            " Will visit again soon.",
-            " Nice ambiance overall.",
-            " Good value for money."
-        ]
-        review += random.choice(modifiers)
+    # Select random templates
+    selected_templates = random.sample(templates, min(num_reviews, len(templates)))
+    
+    # Add some variety to the reviews
+    modifiers = [
+        " The atmosphere was lovely.",
+        " Great presentation!",
+        " Very reasonable prices.",
+        " Perfect for a casual dinner.",
+        " Highly recommended!",
+        " Could use more seasoning.",
+        " Portions were generous.",
+        " Will visit again soon.",
+        " Nice ambiance overall.",
+        " Good value for money.",
+        " The staff was very attentive.",
+        " Would definitely come back."
+    ]
+    
+    for template in selected_templates:
+        review = template + random.choice(modifiers)
         reviews.append(review)
     
     return reviews
@@ -296,7 +369,7 @@ if st.session_state.page == "Recommend":
             st.session_state.results = None
             st.session_state.df = None
 
-            with st.spinner("Searching and analyzing reviews..."):
+            with st.spinner("Searching restaurants, analyzing reviews, and generating AI content..."):
                 # Updated headers for new Foursquare API
                 headers = {
                     "Accept": "application/json",
@@ -305,7 +378,7 @@ if st.session_state.page == "Recommend":
                 }
                 
                 # Updated endpoint and parameters
-                params = {"query": food, "near": location, "limit": 20}
+                params = {"query": food, "near": location, "limit": 15}
                 res = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params)
                 
                 if res.status_code != 200:
@@ -340,15 +413,19 @@ if st.session_state.page == "Recommend":
                                 if tips_res.status_code == 200:
                                     tips_data = tips_res.json()
                                     tips = tips_data.get('results', []) if isinstance(tips_data, dict) else []
-                                    review_texts = [tip.get("text", "") for tip in tips[:5]] if tips else []
+                                    review_texts = [tip.get("text", "") for tip in tips[:3]] if tips else []
                             except:
                                 pass
 
-                        # If no real reviews, generate synthetic ones
+                        # Generate different number of reviews for each restaurant (3-7 reviews)
+                        num_reviews = random.randint(3, 7)
+                        
+                        # If no real reviews, generate AI ones with varying sentiment
                         if not review_texts:
-                            # Generate a random rating between 3.5 and 5.0 for demonstration
-                            synthetic_rating = round(random.uniform(3.5, 5.0), 1)
-                            review_texts = generate_reviews(name, food, synthetic_rating)
+                            # Generate a random rating between 3.0 and 5.0
+                            base_rating = round(random.uniform(3.0, 5.0), 1)
+                            # Use AI model to generate reviews
+                            review_texts = generate_ai_reviews(name, food, base_rating, num_reviews)
                         
                         # Sentiment analysis
                         sentiments = []
@@ -358,11 +435,13 @@ if st.session_state.page == "Recommend":
                                 stars = int(result["label"].split()[0])
                                 sentiments.append(stars)
                             except:
-                                # If sentiment analysis fails, use a random rating
-                                sentiments.append(random.randint(3, 5))
+                                # If sentiment analysis fails, use a random rating based on review content
+                                sentiment_score = random.randint(3, 5) if any(word in tip.lower() for word in ['great', 'amazing', 'excellent', 'love', 'best']) else random.randint(1, 3)
+                                sentiments.append(sentiment_score)
 
-                        # Get image from improved image service
-                        photo_url = get_restaurant_image(name, location, food)
+                        # Get image from Google API
+                        search_query = f"{name} {location} restaurant"
+                        photo_url = get_google_image(search_query)
 
                         avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
 
@@ -374,7 +453,8 @@ if st.session_state.page == "Recommend":
                             "Stars": "⭐" * int(round(avg_rating)) if avg_rating > 0 else "No reviews",
                             "Reviews": len(sentiments),
                             "Image": photo_url,
-                            "Tips": review_texts[:5] if review_texts else ["No reviews available"]
+                            "Tips": review_texts,
+                            "NumReviews": len(sentiments)
                         })
 
                     if results:
@@ -406,36 +486,31 @@ if st.session_state.page == "Recommend":
         # Only show analysis if we have ratings
         if analysis_df['Rating'].sum() > 0:
             # Create tabs for different analysis views
-            tab1, tab2 = st.tabs(["Top Categories", "Review Insights"])
+            tab1, tab2 = st.tabs(["Rating Distribution", "Review Insights"])
             
             with tab1:
-                # Extract categories from food types
-                analysis_df['Category'] = analysis_df['Restaurant'].apply(lambda x: ' '.join([w for w in x.split() if w.isupper() or w.istitle()][:2]))
+                # Rating distribution chart
+                fig = px.histogram(analysis_df, x='Rating', 
+                                  title='Distribution of Restaurant Ratings',
+                                  nbins=10, color='Rating',
+                                  color_continuous_scale='viridis')
+                st.plotly_chart(fig, use_container_width=True)
                 
-                # Group by category
-                category_df = analysis_df.groupby('Category').agg({
-                    'Rating': 'mean',
-                    'Restaurant': 'count'
-                }).rename(columns={'Restaurant': 'Count'}).sort_values('Rating', ascending=False)
-                
-                if not category_df.empty:
-                    # Category bar chart
-                    fig3 = px.bar(category_df.head(10), 
-                                 x=category_df.head(10).index,
-                                 y='Rating',
-                                 title='Top Restaurant Categories by Average Rating',
-                                 color='Rating',
-                                 color_continuous_scale='thermal')
-                    st.plotly_chart(fig3, use_container_width=True)
-                else:
-                    st.warning("No category data available for visualization")
+                # Show statistics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Average Rating", f"{analysis_df['Rating'].mean():.2f} ⭐")
+                with col2:
+                    st.metric("Total Reviews", f"{analysis_df['Reviews'].sum()}")
+                with col3:
+                    st.metric("Top Rated", f"{analysis_df['Rating'].max():.2f} ⭐")
             
             with tab2:
                 # Sentiment analysis of reviews
-                st.markdown("### 💬 Review Sentiment Highlights")
+                st.markdown("### 💬 AI-Generated Review Highlights")
                 
                 # Get all review texts
-                all_reviews = [review for sublist in analysis_df['Tips'] for review in sublist if review != "No reviews available"]
+                all_reviews = [review for sublist in analysis_df['Tips'] for review in sublist]
                 
                 if all_reviews:
                     # Show word cloud of common terms
@@ -447,17 +522,20 @@ if st.session_state.page == "Recommend":
                     plt.axis("off")
                     st.pyplot(plt)
                     
-                    # Show longest reviews
-                    st.markdown("### 📝 Longest Reviews")
-                    longest_reviews = sorted(all_reviews, key=len, reverse=True)[:3]
-                    for i, review in enumerate(longest_reviews, 1):
-                        st.markdown(f"{i}. {review[:300]}..." if len(review) > 300 else f"{i}. {review}")
+                    # Show sample reviews from top restaurants
+                    st.markdown("### 📝 Sample Reviews from Top Restaurants")
+                    top_restaurants = analysis_df.nlargest(3, 'Rating')
+                    for idx, restaurant in top_restaurants.iterrows():
+                        st.markdown(f"**{restaurant['Restaurant']}** ({restaurant['Rating']}⭐):")
+                        for i, review in enumerate(restaurant['Tips'][:2], 1):
+                            st.markdown(f"{i}. _{review}_")
+                        st.markdown("---")
                 else:
                     st.warning("No reviews available for analysis")
         else:
             st.info("No rating data available for analysis in current search results")
 
-        # ======== CONTINUE WITH EXISTING CODE ========
+        # ======== TOP PICKS SECTION ========
         # Filter out restaurants with zero reviews for top picks
         reviewed_restaurants = [r for r in st.session_state.results if r["Reviews"] > 0]
         top3 = sorted(reviewed_restaurants, key=lambda x: x["Rating"], reverse=True)[:3] if reviewed_restaurants else []
@@ -473,11 +551,12 @@ if st.session_state.page == "Recommend":
             if i < len(top3):
                 r = top3[i]
                 with col:
-                    # Display restaurant image with error handling
+                    # Display restaurant image
                     try:
                         st.image(r["Image"], use_column_width=True, caption=r["Restaurant"])
                     except:
-                        st.warning("Image not available")
+                        st.image("https://source.unsplash.com/400x300/?restaurant,food", 
+                                use_column_width=True, caption="Restaurant Image")
                     
                     st.markdown(f"""
                         <div style="background-color: {color}; border-radius: 15px; padding: 20px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2); color: black; font-weight: bold;">
@@ -485,6 +564,7 @@ if st.session_state.page == "Recommend":
                             <div style="font-size: 18px; margin-bottom: 8px;">{r['Restaurant']}</div>
                             <div style="font-size: 15px; margin-bottom: 8px;">{r['Address']}</div>
                             <div style="font-size: 16px;">{r['Stars']} ({r['Rating']})</div>
+                            <div style="font-size: 14px; margin-bottom: 8px;">{r['Reviews']} reviews</div>
                             <div style="margin-top: 10px;">
                                 <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 locate restaurant</a>
                             </div>
@@ -493,23 +573,24 @@ if st.session_state.page == "Recommend":
 
         # Gallery Pick Section
         st.divider()
-        st.subheader("🖼️ Gallery Pick")
+        st.subheader("🖼️ Restaurant Gallery")
 
-        # Filter out restaurants without images
-        restaurants_with_images = [r for r in st.session_state.results if r["Image"]]
-        
         # Create columns for the gallery
         gallery_cols = st.columns(3)
         
-        for idx, r in enumerate(sorted(restaurants_with_images, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)[:3]):
+        for idx, r in enumerate(st.session_state.results[:6]):  # Show first 6 restaurants
             with gallery_cols[idx % 3]:
+                try:
+                    st.image(r["Image"], use_column_width=True, caption=f"{r['Restaurant']} - {r['Rating']}⭐")
+                except:
+                    st.image("https://source.unsplash.com/400x300/?restaurant,food", 
+                            use_column_width=True, caption=f"{r['Restaurant']} - {r['Rating']}⭐")
+                
                 st.markdown(f"""
-                    <div class="gallery-img-container">
-                        <img src="{r['Image']}" class="gallery-img" onerror="this.src='https://source.unsplash.com/400x300/?restaurant,food'"/>
-                    </div>
-                    <div class="gallery-caption">
+                    <div style="text-align: center;">
                         <strong>{r['Restaurant']}</strong><br>
-                        {'⭐ ' + str(r['Rating']) if r['Rating'] > 0 else 'No reviews'}<br>
+                        {r['Stars']} ({r['Rating']})<br>
+                        {r['Reviews']} reviews<br>
                         <a href="{r['Google Maps Link']}" target="_blank" class="map-link">📍 View on Map</a>
                     </div>
                 """, unsafe_allow_html=True)
@@ -517,7 +598,7 @@ if st.session_state.page == "Recommend":
         st.divider()
         if reviewed_restaurants:
             top = max(reviewed_restaurants, key=lambda x: x["Rating"])
-            st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐")
+            st.metric(label="🏆 Top Pick", value=top["Restaurant"], delta=f"{top['Rating']} ⭐ ({top['Reviews']} reviews)")
 
             top_pick = {
                 "Restaurant": top["Restaurant"],
@@ -525,48 +606,51 @@ if st.session_state.page == "Recommend":
                 "Address": top["Address"],
                 "Google Maps Link": top["Google Maps Link"],
                 "Food": food,
-                "Location": location
+                "Location": location,
+                "ReviewCount": top["Reviews"]
             }
             append_history(top_pick)
         else:
             st.warning("No restaurants with reviews found to select a top pick.")
 
         st.divider()
-        st.subheader("📸 Restaurant Highlights")
+        st.subheader("📝 Detailed Restaurant Reviews")
 
-        cols = st.columns(2)
         for idx, r in enumerate(sorted(st.session_state.results, key=lambda x: x["Rating"] if x["Rating"] > 0 else 0, reverse=True)):
-            with cols[idx % 2]:
-                st.markdown(f"### {r['Restaurant']}")
-                st.markdown(f"**📍 Address:** {r['Address']}")
-                st.markdown(f"[locate restaurant]({r['Google Maps Link']})", unsafe_allow_html=True)
-                st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)" if r['Reviews'] > 0 else "**⭐ Rating:** No reviews")
+            with st.expander(f"{r['Restaurant']} - {r['Rating']}⭐ ({r['Reviews']} reviews)"):
+                col1, col2 = st.columns([1, 2])
                 
-                # Display image with error handling
-                try:
-                    st.image(r["Image"], use_column_width=True, caption=f"{r['Restaurant']} - Rating: {r['Rating']}")
-                except:
-                    st.warning("Image not available")
+                with col1:
+                    try:
+                        st.image(r["Image"], use_column_width=True, caption=r["Restaurant"])
+                    except:
+                        st.image("https://source.unsplash.com/400x300/?restaurant,food", 
+                                use_column_width=True, caption=r["Restaurant"])
+                    
+                    st.markdown(f"**📍 Address:** {r['Address']}")
+                    st.markdown(f"**⭐ Rating:** {r['Rating']} ({r['Reviews']} reviews)")
+                    st.markdown(f"[📍 View on Google Maps]({r['Google Maps Link']})", unsafe_allow_html=True)
                 
-                st.markdown("💬 **Reviews:**")
-                for tip in r["Tips"][:3]:  # Show only first 3 reviews
-                    st.markdown(f"• _{tip}_")
-                st.markdown("---")
+                with col2:
+                    st.markdown("### 💬 Customer Reviews")
+                    for i, tip in enumerate(r["Tips"][:5], 1):
+                        st.markdown(f"**Review {i}:** _{tip}_")
+                    st.markdown(f"*AI-generated based on restaurant rating and cuisine type*")
 
 # -------- PAGE: Deep Learning --------
 elif st.session_state.page == "Deep Learning":
     st.title("🤖 Deep Learning Explained")
     st.markdown("""
-    This app uses **BERT-based sentiment analysis** to evaluate restaurant reviews and provide AI-driven recommendations.
+    This app uses **BERT-based sentiment analysis** and **GPT-2 text generation** to evaluate and create restaurant reviews.
 
     ### How it works:
-    - Fetches nearby restaurants from the **Foursquare Places API** based on your food and location input.
-    - Retrieves recent user reviews ("tips") for each restaurant.
-    - Uses a pretrained **BERT sentiment analysis model** to analyze the sentiment of these reviews.
-    - Calculates an average rating score from the sentiment predictions.
-    - Ranks restaurants by these AI-driven scores to recommend the best places.
+    - **Foursquare Places API**: Fetches nearby restaurants based on your food and location
+    - **BERT Sentiment Analysis**: Analyzes review sentiment using Hugging Face transformers
+    - **GPT-2 Text Generation**: Creates realistic reviews when real ones aren't available
+    - **Google Images API**: Fetches high-quality restaurant photos
+    - **AI-Powered Ranking**: Ranks restaurants based on AI-analyzed sentiment scores
 
-    Feel free to explore the Recommend tab and try it yourself!
+    Each restaurant gets a different number of reviews (3-7) generated by local AI models!
     """)
 
 # -------- PAGE: History --------
@@ -593,16 +677,25 @@ elif st.session_state.page == "History":
 elif st.session_state.page == "About":
     st.title("ℹ️ About This App")
     st.markdown("""
-    **AI Restaurant Recommender** is a Streamlit web app designed to help you discover top restaurants based on your food cravings and location using:
+    **AI Restaurant Recommender** is a Streamlit web app designed to help you discover top restaurants using:
 
-    - [Foursquare Places API](https://developer.foursquare.com/) for places and user reviews (updated to new API endpoints).
-    - State-of-the-art BERT-based sentiment analysis model from Hugging Face.
-    - Firebase Firestore to save and track your recommendation history.
-    - Google Maps integration for easy navigation to recommended restaurants.
-    - AI-generated reviews when real reviews are not available.
+    - **Foursquare Places API**: For restaurant data and locations
+    - **Google Custom Search API**: For high-quality restaurant images
+    - **Hugging Face Transformers**: 
+      - BERT for sentiment analysis
+      - GPT-2 for AI-generated reviews
+    - **Firebase Firestore**: For saving recommendation history
+    - **Google Maps**: For navigation to recommended restaurants
+
+    ### Features:
+    - AI-generated reviews with varying counts per restaurant
+    - Sentiment-based rating system
+    - High-quality restaurant images
+    - Interactive data visualizations
+    - Historical recommendation tracking
 
     --- 
-    _Powered by OpenAI and Streamlit._
+    _Powered by cutting-edge AI and cloud technologies_
     """)
 
 # Footer
