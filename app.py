@@ -10,6 +10,7 @@ import plotly.express as px
 from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import time
+import random
 
 # --------- PAGE CONFIGURATION ---------
 st.set_page_config(page_title="🍽️ Restaurant Recommender", layout="wide")
@@ -87,42 +88,63 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --------- GOOGLE CUSTOM SEARCH API FUNCTION ---------
-def get_google_image(search_query):
-    """Get image from Google Custom Search API"""
-    GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
-    GOOGLE_CSE_ID = st.secrets.get("CX", "")
+# --------- IMAGE SERVICE FUNCTIONS ---------
+def get_restaurant_image(restaurant_name, location, food_type):
+    """Get restaurant image from various fallback services"""
     
-    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        st.warning("Google API keys not configured. Using placeholder images.")
-        return "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop"
+    # List of fallback image services
+    services = [
+        _get_unsplash_image,
+        _get_picsum_image,
+        _get_foodish_image,
+        _get_placeholder_image
+    ]
     
-    try:
-        # Search for restaurant images
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": GOOGLE_API_KEY,
-            "cx": GOOGLE_CSE_ID,
-            "q": f"{search_query} restaurant food",
-            "searchType": "image",
-            "num": 1,
-            "safe": "active",
-            "imgSize": "medium",
-            "imgType": "photo"
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if "items" in data and len(data["items"]) > 0:
-                return data["items"][0]["link"]
-        else:
-            st.error(f"Google API error: {response.status_code}")
-    except Exception as e:
-        st.error(f"Google API error: {e}")
+    # Try each service until we get a valid image
+    for service in services:
+        try:
+            image_url = service(restaurant_name, location, food_type)
+            if image_url and _validate_image_url(image_url):
+                return image_url
+        except:
+            continue
     
-    # Fallback to placeholder image
+    # Final fallback
     return "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop"
+
+def _get_unsplash_image(restaurant_name, location, food_type):
+    """Get image from Unsplash"""
+    search_terms = [restaurant_name, food_type, "restaurant", "food"]
+    random.shuffle(search_terms)
+    query = ",".join(search_terms[:2])
+    return f"https://source.unsplash.com/400x300/?{query}"
+
+def _get_picsum_image(restaurant_name, location, food_type):
+    """Get random food image from Picsum"""
+    image_id = random.randint(1, 1000)
+    return f"https://picsum.photos/400/300?random={image_id}"
+
+def _get_foodish_image(restaurant_name, location, food_type):
+    """Get food image from Foodish API"""
+    try:
+        response = requests.get("https://foodish-api.com/api/", timeout=5)
+        if response.status_code == 200:
+            return response.json().get("image", "")
+    except:
+        pass
+    return ""
+
+def _get_placeholder_image(restaurant_name, location, food_type):
+    """Get placeholder image"""
+    return f"https://via.placeholder.com/400x300/4CAF50/white?text={restaurant_name.replace(' ', '+')}"
+
+def _validate_image_url(url):
+    """Validate that the image URL is accessible"""
+    try:
+        response = requests.head(url, timeout=5)
+        return response.status_code == 200
+    except:
+        return False
 
 # --------- FIRESTORE FUNCTIONS ---------
 def read_history():
@@ -224,9 +246,8 @@ if st.session_state.page == "Recommend":
                             # Sentiment
                             sentiments = [int(classifier(tip[:512])[0]["label"].split()[0]) for tip in review_texts]
 
-                            # Get image from Google Custom Search instead of Foursquare
-                            search_query = f"{name} {location}"
-                            photo_url = get_google_image(search_query)
+                            # Get image from fallback service
+                            photo_url = get_restaurant_image(name, location, food)
 
                             avg_rating = round(sum(sentiments)/len(sentiments),2) if sentiments else 0
                             results.append({
@@ -350,7 +371,7 @@ elif st.session_state.page == "About":
     - BERT sentiment analysis
     - Firebase Firestore for history tracking
     - Google Maps links for navigation
-    - Google Custom Search API for restaurant images
+    - Multiple image services for restaurant photos
     """)
 
 # --------- FOOTER ---------
