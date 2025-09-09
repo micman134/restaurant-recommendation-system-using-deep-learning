@@ -145,9 +145,11 @@ if st.session_state.page == "Recommend":
         else:
             st.session_state.results = []
             with st.spinner("Searching..."):
-                headers = {"Authorization": api_key, "accept": "application/json"}
+                #headers = {"Authorization": api_key, "accept": "application/json"}
+                SERVICE_KEY = "M5XCF0QROQ4Q4G5RTPVV2E3HMLBTNMKX1MNWIMDCB4NU1SQF"  # Replace with your service key
+                HEADERS = {"Accept": "application/json","Authorization": f"Bearer {SERVICE_KEY}","X-Places-Api-Version": "2025-06-17"}
                 params = {"query": food, "near": location, "limit": 20}
-                res = requests.get("https://api.foursquare.com/v3/places/search", headers=headers, params=params)
+                res = requests.get("https://places-api.foursquare.com/places/search", headers=HEADERS, params=params)
                 restaurants = res.json().get("results", [])
 
                 if not restaurants:
