@@ -151,7 +151,7 @@ if st.session_state.page == "Recommend":
                     "Authorization": f"Bearer {SERVICE_KEY}",
                     "X-Places-Api-Version": "2025-06-17"
                 }
-                params = {"query": food, "near": location, "limit": 2}
+                params = {"query": food, "near": location, "limit": 20}
                 res = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params)
                 if res.status_code != 200:
                     st.error(f"❌ Foursquare API error: {res.status_code} {res.text}")
