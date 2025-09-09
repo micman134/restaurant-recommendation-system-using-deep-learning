@@ -143,43 +143,73 @@ if not firebase_admin._apps:
 
 db = firestore.client()
 
-# --------- GOOGLE IMAGES API FUNCTION ---------
-def get_google_image(search_query):
-    """Get image from Google Custom Search API"""
-    GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY", "")
-    GOOGLE_CSE_ID = st.secrets.get("CX", "")
+# --------- IMAGE SERVICE FUNCTIONS ---------
+def get_restaurant_image(restaurant_name, location, food_type):
+    """Get restaurant image from multiple fallback services (no Google API)"""
     
-    if not GOOGLE_API_KEY or not GOOGLE_CSE_ID:
-        st.warning("Google API keys not configured. Using placeholder images.")
-        return f"https://source.unsplash.com/400x300/?restaurant,{search_query.replace(' ', ',')}"
+    # List of reliable image services that don't require API keys
+    image_services = [
+        _get_unsplash_image,
+        _get_picsum_image,
+        _get_foodish_image,
+        _get_placeholder_image
+    ]
     
+    # Try each service until we get a valid image
+    for service in image_services:
+        try:
+            image_url = service(restaurant_name, location, food_type)
+            if image_url and _validate_image_url(image_url):
+                return image_url
+        except:
+            continue
+    
+    # Final fallback
+    return "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop"
+
+def _get_unsplash_image(restaurant_name, location, food_type):
+    """Get image from Unsplash (no API key needed)"""
+    search_terms = [restaurant_name, food_type, "restaurant", "food", "dining", "cuisine"]
+    random.shuffle(search_terms)
+    query = ",".join(search_terms[:2])
+    
+    # Use different Unsplash endpoints for variety
+    unsplash_options = [
+        f"https://source.unsplash.com/400x300/?{query}",
+        f"https://source.unsplash.com/featured/400x300/?{query}",
+        f"https://source.unsplash.com/random/400x300/?{query}",
+        f"https://images.unsplash.com/photo-{random.randint(1500000000000, 1600000000000)}?w=400&h=300&fit=crop"
+    ]
+    
+    return random.choice(unsplash_options)
+
+def _get_picsum_image(restaurant_name, location, food_type):
+    """Get random food image from Picsum"""
+    image_id = random.randint(1, 1000)
+    return f"https://picsum.photos/400/300?random={image_id}"
+
+def _get_foodish_image(restaurant_name, location, food_type):
+    """Get food image from Foodish API"""
     try:
-        # Search for restaurant images using Google Custom Search API
-        url = "https://www.googleapis.com/customsearch/v1"
-        params = {
-            "key": GOOGLE_API_KEY,
-            "cx": GOOGLE_CSE_ID,
-            "q": f"{search_query} restaurant food interior",
-            "searchType": "image",
-            "num": 1,
-            "safe": "active",
-            "imgSize": "medium",
-            "imgType": "photo",
-            "rights": "cc_publicdomain"
-        }
-        
-        response = requests.get(url, params=params, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            if "items" in data and len(data["items"]) > 0:
-                return data["items"][0]["link"]
-        else:
-            st.error(f"Google API error: {response.status_code}")
-    except Exception as e:
-        st.error(f"Google API error: {e}")
-    
-    # Fallback to Unsplash if Google API fails
-    return f"https://source.unsplash.com/400x300/?restaurant,{search_query.replace(' ', ',')}"
+        food_types = ['pizza', 'burger', 'sushi', 'pasta', 'steak', 'chicken', 'salad', 'sandwich']
+        food_choice = random.choice(food_types)
+        return f"https://foodish-api.com/images/{food_choice}/{food_choice}{random.randint(1, 30)}.jpg"
+    except:
+        return ""
+
+def _get_placeholder_image(restaurant_name, location, food_type):
+    """Get placeholder image with restaurant name"""
+    restaurant_initials = ''.join([word[0].upper() for word in restaurant_name.split()[:2]])
+    color = random.choice(['4CAF50', '2196F3', 'FF5722', '9C27B0', '607D8B'])
+    return f"https://via.placeholder.com/400x300/{color}/white?text={restaurant_initials}+{food_type}"
+
+def _validate_image_url(url):
+    """Validate that the image URL is accessible"""
+    try:
+        response = requests.head(url, timeout=3)
+        return response.status_code == 200
+    except:
+        return False
 
 # --------- REVIEW GENERATION WITH LOCAL AI MODEL ---------
 def generate_ai_reviews(restaurant_name, food_type, rating, num_reviews):
@@ -204,22 +234,21 @@ def generate_ai_reviews(restaurant_name, food_type, rating, num_reviews):
             # Generate review with AI
             generated = text_generator(
                 prompt,
-                max_length=100,
+                max_length=80,
                 num_return_sequences=1,
-                temperature=0.8,
+                temperature=0.9,
                 do_sample=True,
                 pad_token_id=50256
             )
             
             review_text = generated[0]['generated_text'].replace(prompt, '').strip()
-            if review_text:
+            if review_text and len(review_text) > 10:
                 reviews.append(review_text)
             else:
                 # Fallback if AI generation fails
-                reviews.append(f"Good food and service at {restaurant_name}.")
+                reviews.append(f"Great {food_type.lower()} and excellent service at {restaurant_name}.")
                 
     except Exception as e:
-        st.error(f"AI review generation failed: {e}")
         return generate_template_reviews(restaurant_name, food_type, rating, num_reviews)
     
     return reviews
@@ -378,15 +407,19 @@ if st.session_state.page == "Recommend":
                 }
                 
                 # Updated endpoint and parameters
-                params = {"query": food, "near": location, "limit": 15}
-                res = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params)
-                
-                if res.status_code != 200:
-                    st.error(f"❌ Foursquare API error: {res.status_code} {res.text}")
+                params = {"query": food, "near": location, "limit": 12}
+                try:
+                    res = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params, timeout=10)
+                    
+                    if res.status_code != 200:
+                        st.error(f"❌ Foursquare API error: {res.status_code}")
+                        restaurants = []
+                    else:
+                        data = res.json()
+                        restaurants = data.get("results", [])
+                except Exception as e:
+                    st.error(f"❌ Foursquare API connection error: {e}")
                     restaurants = []
-                else:
-                    data = res.json()
-                    restaurants = data.get("results", [])
 
                 if not restaurants:
                     st.error("❌ No restaurants found. Try different search terms.")
@@ -439,9 +472,8 @@ if st.session_state.page == "Recommend":
                                 sentiment_score = random.randint(3, 5) if any(word in tip.lower() for word in ['great', 'amazing', 'excellent', 'love', 'best']) else random.randint(1, 3)
                                 sentiments.append(sentiment_score)
 
-                        # Get image from Google API
-                        search_query = f"{name} {location} restaurant"
-                        photo_url = get_google_image(search_query)
+                        # Get image from reliable fallback service (no Google API)
+                        photo_url = get_restaurant_image(name, location, food)
 
                         avg_rating = round(sum(sentiments) / len(sentiments), 2) if sentiments else 0
 
@@ -555,7 +587,7 @@ if st.session_state.page == "Recommend":
                     try:
                         st.image(r["Image"], use_column_width=True, caption=r["Restaurant"])
                     except:
-                        st.image("https://source.unsplash.com/400x300/?restaurant,food", 
+                        st.image("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop", 
                                 use_column_width=True, caption="Restaurant Image")
                     
                     st.markdown(f"""
@@ -583,7 +615,7 @@ if st.session_state.page == "Recommend":
                 try:
                     st.image(r["Image"], use_column_width=True, caption=f"{r['Restaurant']} - {r['Rating']}⭐")
                 except:
-                    st.image("https://source.unsplash.com/400x300/?restaurant,food", 
+                    st.image("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop", 
                             use_column_width=True, caption=f"{r['Restaurant']} - {r['Rating']}⭐")
                 
                 st.markdown(f"""
@@ -624,7 +656,7 @@ if st.session_state.page == "Recommend":
                     try:
                         st.image(r["Image"], use_column_width=True, caption=r["Restaurant"])
                     except:
-                        st.image("https://source.unsplash.com/400x300/?restaurant,food", 
+                        st.image("https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=400&h=300&fit=crop", 
                                 use_column_width=True, caption=r["Restaurant"])
                     
                     st.markdown(f"**📍 Address:** {r['Address']}")
@@ -647,7 +679,7 @@ elif st.session_state.page == "Deep Learning":
     - **Foursquare Places API**: Fetches nearby restaurants based on your food and location
     - **BERT Sentiment Analysis**: Analyzes review sentiment using Hugging Face transformers
     - **GPT-2 Text Generation**: Creates realistic reviews when real ones aren't available
-    - **Google Images API**: Fetches high-quality restaurant photos
+    - **Multiple Image Services**: Uses reliable free image APIs (no Google API needed)
     - **AI-Powered Ranking**: Ranks restaurants based on AI-analyzed sentiment scores
 
     Each restaurant gets a different number of reviews (3-7) generated by local AI models!
@@ -680,7 +712,7 @@ elif st.session_state.page == "About":
     **AI Restaurant Recommender** is a Streamlit web app designed to help you discover top restaurants using:
 
     - **Foursquare Places API**: For restaurant data and locations
-    - **Google Custom Search API**: For high-quality restaurant images
+    - **Free Image Services**: Unsplash, Picsum, and Foodish APIs for restaurant images
     - **Hugging Face Transformers**: 
       - BERT for sentiment analysis
       - GPT-2 for AI-generated reviews
@@ -688,14 +720,14 @@ elif st.session_state.page == "About":
     - **Google Maps**: For navigation to recommended restaurants
 
     ### Features:
-    - AI-generated reviews with varying counts per restaurant
+    - AI-generated reviews with varying counts per restaurant (3-7)
     - Sentiment-based rating system
-    - High-quality restaurant images
+    - High-quality restaurant images from free APIs
     - Interactive data visualizations
     - Historical recommendation tracking
 
     --- 
-    _Powered by cutting-edge AI and cloud technologies_
+    _Powered by cutting-edge AI and reliable free APIs_
     """)
 
 # Footer
