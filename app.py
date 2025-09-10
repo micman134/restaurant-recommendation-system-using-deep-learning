@@ -169,7 +169,7 @@ if st.session_state.page == "Recommend":
             st.session_state.df = None
 
             with st.spinner("Searching and analyzing reviews..."):
-                params = {"query": food, "near": location, "limit": 20}
+                params = {"query": food, "near": location, "limit": 2}
                 res = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params)
                 restaurants = res.json().get("results", [])
 
