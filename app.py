@@ -192,7 +192,7 @@ if st.session_state.page == "Recommend":
 
     col1, _ = st.columns([1, 1])
     with col1:
-        food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Jollof, Pizza")
+        food = st.text_input("🍕 Food Type", placeholder="e.g., Sushi, Amala, Pizza")
 
     col1, _ = st.columns([1, 1])
     with col1:
